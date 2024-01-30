@@ -1,0 +1,2 @@
+# miniAOI
+ Visual Inspection System
