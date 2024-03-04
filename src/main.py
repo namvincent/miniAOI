@@ -42,20 +42,20 @@ def main(name):
             compare(areas)
     else:
         if name == 0:
-            with open('SampleId.txt', 'r') as file:
-                for line in file:
-                    id = int(line.strip())
-            url = f"http://fvn-s-web01.friwo.local:5000/api/VisualIspection/PD/GetSamplePicture?id={id}"
-            response = requests.get(url)
-            # Convert Base64 bytes to string (optional, depending on your use case)
+            # with open('SampleId.txt', 'r') as file:
+            #     for line in file:
+            #         id = int(line.strip())
+            # url = f"http://fvn-s-web01.friwo.local:5000/api/VisualIspection/PD/GetSamplePicture?id={id}"
+            # response = requests.get(url)
+            # # Convert Base64 bytes to string (optional, depending on your use case)
 
-            print(
-                response.content
-            )
-            result_list = json.loads(response.content)
-            json_item = result_list[0]
-            base64str = json_item['picture']
-            print(base64str)
+            # print(
+            #     response.content
+            # )
+            # result_list = json.loads(response.content)
+            # json_item = result_list[0]
+            # base64str = json_item['picture']
+            # print(base64str)
             source_path = 'Sources/source_image.jpg'
             image = Image.open(source_path)
             buffered = BytesIO()
@@ -91,16 +91,16 @@ def main(name):
                 "remark": "strwerwering"
             })
             headers = {'Content-Type': 'application/json'}
-            response = requests.post(url, data=data, headers=headers)
+            # response = requests.post(url, data=data, headers=headers)
 
-            if response.status_code == 200 or response.status_code == 201:
-                print("Data successfully sent.")
-                lines_to_write = int(response.content)
-                with open('SampleId.txt', 'w') as file:
-                    file.writelines(str(lines_to_write))
-            else:
-                print("Failed to send data:", response.status_code)
-                print("Failed to send data:", response.request.body)
+            # if response.status_code == 200 or response.status_code == 201:
+            #     print("Data successfully sent.")
+            #     lines_to_write = int(response.content)
+            #     with open('SampleId.txt', 'w') as file:
+            #         file.writelines(str(lines_to_write))
+            # else:
+            #     print("Failed to send data:", response.status_code)
+            #     print("Failed to send data:", response.request.body)
 
 main(2)
 
