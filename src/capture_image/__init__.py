@@ -11,8 +11,8 @@ def capture_frame(source):
     else:
         file_name = "captured_image.jpg"
     ffmpeg_cmd = [
-        "raspistill",
-        "-t",
+        "libcamera-still",
+        "--timeout",
         "1000",
         "--width",
         "1000",
@@ -45,8 +45,8 @@ def capture_frame(source):
 
 def take_picture_ocr():
     ffmpeg_cmd = [
-        "rpicam-still",
-        " -t",
+        "libcamera-still",
+        "--timeout",
         "0",
         "--vflip",
         "1",
@@ -69,14 +69,14 @@ def take_picture_ocr():
         "--brightness",
         "-0.1",
         # "--immediate","1",
-        "--hdr",
-        "sensor",
+        # "--hdr",
+        # "sensor",
         # "--autofocus-on-capture","1",
         "--denoise",
         "off",
-        "-o",
+        "--o",
         "ocr.jpg",
-        "-q",
+        "--quality",
         "1000",
         "--roi",
         "0.4,0.4,0.5,0.5",
@@ -86,8 +86,8 @@ def take_picture_ocr():
 
 def take_live_ocr():
     ffmpeg_cmd = [
-        "rpicam-vid",
-        " -t",
+        "libcamera-still",
+        "--timeout",
         "0",
         # "--lens-position","5",
         "--autofocus-mode",
@@ -105,13 +105,13 @@ def take_live_ocr():
         # "--contrast", "1",
         # "--brightness", "0.5",
         # "--immediate","1",
-        "--hdr",
-        "sensor",
+        # "--hdr",
+        # "sensor",
         "--autofocus-on-capture",
         "1",
         "--denoise",
         "cdn_hq",
-        "-o",
+        "--o",
         "ocr.jpg",
         # "-q","1000"
         "--roi",

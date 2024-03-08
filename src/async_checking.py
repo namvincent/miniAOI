@@ -512,7 +512,7 @@ async def calculate_async(area):
         "checkingContent": checking_content,
     }
     final_data.append(tmp)
-    # # cv.imshow(f"Results/{item}-result.jpg", partial_area_image)
+    cv.imwrite(f"Results/{item}-result.jpg", partial_area_image)
     # # cv.imshow(partial_area_image)
 
     if False in final_result:
@@ -735,19 +735,19 @@ content_text = None
 contents = None
 #subprocess.run("python3 ~/test_joint.py")
 #take_picture("captured_image.jpg")
-capture_frame(False)
-source_image = cv.imread(SOURCE_PATH)
-image = cv.imread(IMAGE_PATH)
-final_result_image = image.copy()
-final_result = []
-final_data = []
-spell = add_special_words_to_dictionary()
-contents = []
-with open("ocr.txt") as file:
-    content_text = file.read()
-    for i in content_text.strip():
-        if i is not None:
-            spell.word_frequency.add(i)
+# capture_frame(False)
+# source_image = cv.imread(SOURCE_PATH)
+# image = cv.imread(IMAGE_PATH)
+# final_result_image = image.copy()
+# final_result = []
+# final_data = []
+# spell = add_special_words_to_dictionary()
+# contents = []
+# with open("ocr.txt") as file:
+#     content_text = file.read()
+#     for i in content_text.strip():
+#         if i is not None:
+#             spell.word_frequency.add(i)
 
 
 async def process_visual():
@@ -766,5 +766,22 @@ async def process_visual():
                 File.write(str(item) + "\n")
 
 
-asyncio.run(process_visual())
-cv.imwrite("Results/result.jpg", final_result_image)
+# asyncio.run(process_visual())
+# cv.imwrite("Results/result.jpg", final_result_image)
+
+async def async_checkingq():
+    capture_frame(False)
+    source_image = cv.imread(SOURCE_PATH)
+    image = cv.imread(IMAGE_PATH)
+    final_result_image = image.copy()
+    final_result = []
+    final_data = []
+    spell = add_special_words_to_dictionary()
+    contents = []
+    with open("ocr.txt") as file:
+        content_text = file.read()
+        for i in content_text.strip():
+            if i is not None:
+                spell.word_frequency.add(i)
+    asyncio.run(process_visual())
+    cv.imwrite("Results/result.jpg", final_result_image)

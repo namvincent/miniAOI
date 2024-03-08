@@ -1,3 +1,2 @@
-[{'topLeft': '306,348', 'bottomRight': '502,389', 'checkType': 's', 'result': 'True', 'checkingContent': '100 - 277 V~\nInput | Entrada | Entrée'}]
-[{'topLeft': '322,256', 'bottomRight': '397,271', 'checkType': 's', 'result': 'True', 'checkingContent': ''}]
-[{'topLeft': '822,163', 'bottomRight': '831,181', 'checkType': 'c', 'result': 'True', 'checkingContent': ''}]
+[{'topLeft': '707,533', 'bottomRight': '807,631', 'checkType': 's', 'result': 'False', 'checkingContent': ''}]
+[{'topLeft': '497,512', 'bottomRight': '604,574', 'checkType': 's', 'result': 'False', 'checkingContent': ''}]
