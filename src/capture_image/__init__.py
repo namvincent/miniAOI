@@ -7,7 +7,7 @@ async def capture_frame(source):
     raspi_io.__init__()
     raspi_io.flash_on()
     if source:
-        file_name = "Sources/source_image.jpg"
+        file_name = "Sources/source_image.jpg"        
     else:
         file_name = "captured_image.jpg"
     ffmpeg_cmd = [

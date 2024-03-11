@@ -9,6 +9,7 @@ import pytesseract
 from PIL import Image, ImageFont, ImageDraw
 from spellchecker import SpellChecker
 from capture_image import capture_frame, take_picture, raspi_io
+from Object.VisualResult import serialize_visual_data
 
 
 async def read_out_locations_need_to_be_checked(coordinate_file_path):
@@ -418,7 +419,8 @@ async def calculate_async(area):
     global final_result_image
     final_result_image = final_result_image
     final_result = []
-    final_data = []
+    return_image = image.copy()
+    return_source_image = source_image.copy()
     checking_type, item = area
     result = False
     checking_content = ""
@@ -427,6 +429,13 @@ async def calculate_async(area):
     # source_top_left_y: int = int(item.strip().split(',')[1]-5)
     # source_bottom_right_x: int = int(item.strip().split(',')[2]+5)
     # source_bottom_right_y: int = int(item.strip().split(',')[3]+5)
+
+    # Set the desired percentage of resizing
+    scale_percent = 40  # Adjust this value to the desired percentage
+
+    # Calculate the new dimensions based on the percentage
+    width = int(source_image.shape[1] * scale_percent / 100)
+    height = int(source_image.shape[0] * scale_percent / 100)
 
     offset = 2
     source_top_left = (max(0, top_left[0] - offset), max(0, top_left[1] - offset))
@@ -475,8 +484,13 @@ async def calculate_async(area):
             result = False
             final_color = (0, 0, 255)
         final_result.append(result)
-        cv.rectangle(partial_area_image, (0, 0), (5, 5), final_color, -1)
-        cv.rectangle(final_result_image, top_left, bottom_right, final_color, 1)
+        
+        cv.rectangle(return_image, top_left, bottom_right, final_color, 1)
+        cv.rectangle(final_result_image, top_left, bottom_right, final_color, 3)
+        cv.rectangle(return_source_image, top_left, bottom_right, final_color, 3)
+        # Resize the image
+        resized_source_image = cv.resize(return_source_image, (width, height))
+        resized_image = cv.resize(return_image, (width, height))
     else:
         wrong_position = await check_not_in_position(
             partial_area_image, partial_source_image, item, image
@@ -488,8 +502,11 @@ async def calculate_async(area):
             result = False
             final_color = (0, 0, 255)
         final_result.append(result)
-        cv.rectangle(partial_area_image, (0, 0), (5, 5), final_color, -1)
-        cv.rectangle(final_result_image, top_left, bottom_right, final_color, 1)
+        cv.rectangle(return_image, top_left, bottom_right, final_color, 1)
+        cv.rectangle(final_result_image, top_left, bottom_right, final_color, 3)
+        cv.rectangle(return_source_image, top_left, bottom_right, final_color, 3)
+        resized_source_image = cv.resize(return_source_image, (width, height))
+        resized_image = cv.resize(return_image, (width, height))
         checking_content = await extract_text_from_image(partial_image)
 
         final_result_image = await add_unicode_text_to_image(
@@ -500,14 +517,17 @@ async def calculate_async(area):
             font_size=10,
             text_color=(0, 0, 255),
         )
-    _, encoded_image = cv.imencode(".jpg", partial_area_image)
+    _, encoded_image = cv.imencode(".jpg", resized_image)
+    _, sample_encoded_image = cv.imencode(".jpg", resized_source_image)
     image_bytes = encoded_image.tobytes()
+    sample_image_bytes = sample_encoded_image.tobytes()
     tmp = {
         "topLeft": f"{item[0][0]},{item[0][1]}",
         "bottomRight": f"{item[1][0]},{item[1][1]}",
         "checkType": checking_type,
         "result": str(result),
-        # "finalResultImage": base64.b64encode(image_bytes).decode(),
+        "finalResultImage": base64.b64encode(image_bytes).decode(),
+        "sampleImage" :base64.b64encode(sample_image_bytes).decode(),
         # 'finalResultImage': '',
         "checkingContent": checking_content,
     }
@@ -531,7 +551,7 @@ async def calculate_async(area):
     # )
 
     # # cv.imshow(final_result_image)
-    return final_data
+    return tmp
 
 
 async def check_not_in_position(image, template, area, original_image):
@@ -752,7 +772,7 @@ contents = None
 
 
 async def process_visual():
-
+    final_data = []
     checking_areas = await read_out_locations_need_to_be_checked(COORDINATE_FILE_PATH)
     # tasks = [aoi(area) for area in filter(lambda x: x[0] == "s", checking_areas)]
 
@@ -764,7 +784,7 @@ async def process_visual():
         for item in finish:
             if item is not None:
                 File.write(str(item) + "\n")
-    return 'Done'
+    return finish
 
 # asyncio.run(process_visual())
 # cv.imwrite("Results/result.jpg", final_result_image)
@@ -786,6 +806,7 @@ async def async_checking():
             if i is not None:
                 spell.word_frequency.add(i)    
     # asyncio.run(process_visual())
-    await process_visual()
+    final_data_list = await process_visual()
+    visual_data_json = json.dumps(final_data_list)
     cv.imwrite("Results/result.jpg", final_result_image)
-    return ''
+    return visual_data_json

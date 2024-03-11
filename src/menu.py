@@ -137,7 +137,7 @@ def menu(name):
                 print("Failed to send data:", response.status_code)
                 print("Failed to send data:", response.request.body)
 
-def TakeCoordinates():
+async def TakeCoordinates():
     partNo = "Test"
     with open('SampleId.txt', 'r') as file:
         for line in file:
@@ -206,8 +206,8 @@ def TakeCoordinates():
             bottomRight = item['bottomRight']
             file.write(f's,{topLeft},{bottomRight}\n')
 
-def take_sample():
-    capture_frame(True)
+async def take_sample():
+    await capture_frame(True)
 
     url = "http://fvn-s-web01.friwo.local:5000/api/VisualIspection/QD/InputSample"
             # url = "https://my-json-server.typicode.com/JasonNguyen1205/GitRepo/sample"
