@@ -12,7 +12,7 @@ import base64
 from Image_Processing import encode_image_to_base64
 from Object.Coordinates import Coordinates
 from Object.Coordinates import serialize_coordinates
-from async_checking import async_checkingq
+from async_checking import async_checking
 
 file_path = 'coordinate.txt'
 
@@ -24,7 +24,7 @@ class SampleObject:
         self.remark = remark
 
 
-def main(name):
+def menu(name):
     # Use a breakpoint in the code line below to debug your script.
     # print(f'Hi, {name}')  # Press Ctrl+F8 to toggle the breakpoint.
     if name == 1:

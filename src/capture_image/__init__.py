@@ -3,7 +3,7 @@ import os
 import cv2 as cv
 from capture_image.gpio_controller import raspi_io
 
-def capture_frame(source):
+async def capture_frame(source):
     raspi_io.__init__()
     raspi_io.flash_on()
     if source:

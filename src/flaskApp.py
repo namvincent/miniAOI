@@ -1,18 +1,15 @@
 import subprocess
 import asyncio
-from flask_executor import Executor
 from flask import Flask, render_template
-from main import main,take_sample,TakeCoordinates
-from async_checking import async_checkingq
+from menu import menu,take_sample,TakeCoordinates
+from async_checking import async_checking
 
 app = Flask(__name__)
-executor = Executor(app)
 
 @app.route('/')
 async def home():
-   
-    await async_checkingq()
-    return f"Command executed successfully"
+    await async_checking()
+    return 'Done'
 
 @app.route('/test')
 def test():
@@ -35,7 +32,7 @@ async def dd():
     # asyncio.set_event_loop(loop)
     # result = loop.run_until_complete(checking())
     
-    asyncio.run(async_checkingq())
+    asyncio.run(async_checking())
 
     # future = executor.submit(checking())
     # while not future.done():
@@ -43,8 +40,8 @@ async def dd():
     # return 'll'
 
 async def checking():
-    await async_checkingq()
+    await async_checking()
     return 'done'
 
 if __name__ == '__main__':
-    asyncio.run(app.run(debug=True, host='0.0.0.0'))
+    app.run(debug=True, host='0.0.0.0')

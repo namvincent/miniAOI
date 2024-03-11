@@ -752,7 +752,6 @@ contents = None
 
 
 async def process_visual():
-   
 
     checking_areas = await read_out_locations_need_to_be_checked(COORDINATE_FILE_PATH)
     # tasks = [aoi(area) for area in filter(lambda x: x[0] == "s", checking_areas)]
@@ -765,13 +764,15 @@ async def process_visual():
         for item in finish:
             if item is not None:
                 File.write(str(item) + "\n")
-
+    return 'Done'
 
 # asyncio.run(process_visual())
 # cv.imwrite("Results/result.jpg", final_result_image)
 
-async def async_checkingq():
-    capture_frame(False)
+async def async_checking():
+    global image,source_image
+    global final_result_image
+    await capture_frame(False)
     source_image = cv.imread(SOURCE_PATH)
     image = cv.imread(IMAGE_PATH)
     final_result_image = image.copy()
@@ -783,7 +784,8 @@ async def async_checkingq():
         content_text = file.read()
         for i in content_text.strip():
             if i is not None:
-                spell.word_frequency.add(i)
-    final_result_image = await process_visual()
-    # await process_visual()
+                spell.word_frequency.add(i)    
+    # asyncio.run(process_visual())
+    await process_visual()
     cv.imwrite("Results/result.jpg", final_result_image)
+    return ''
