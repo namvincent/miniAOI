@@ -485,7 +485,7 @@ async def calculate_async(area):
             final_color = (0, 0, 255)
         final_result.append(result)
         
-        cv.rectangle(return_image, top_left, bottom_right, final_color, 1)
+        cv.rectangle(return_image, top_left, bottom_right, final_color, 3)
         cv.rectangle(final_result_image, top_left, bottom_right, final_color, 3)
         cv.rectangle(return_source_image, top_left, bottom_right, final_color, 3)
         # Resize the image
@@ -502,7 +502,7 @@ async def calculate_async(area):
             result = False
             final_color = (0, 0, 255)
         final_result.append(result)
-        cv.rectangle(return_image, top_left, bottom_right, final_color, 1)
+        cv.rectangle(return_image, top_left, bottom_right, final_color, 3)
         cv.rectangle(final_result_image, top_left, bottom_right, final_color, 3)
         cv.rectangle(return_source_image, top_left, bottom_right, final_color, 3)
         resized_source_image = cv.resize(return_source_image, (width, height))

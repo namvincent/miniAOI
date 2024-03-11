@@ -26,7 +26,7 @@ def test():
 async def takeSample():
     await take_sample()
     await TakeCoordinates()
-    return 'ttt'
+    return 'Finish!'
 
 @app.route('/visualInspection')
 async def visualInspection():
