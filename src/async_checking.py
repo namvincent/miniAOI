@@ -735,6 +735,7 @@ content_text = None
 contents = None
 #subprocess.run("python3 ~/test_joint.py")
 #take_picture("captured_image.jpg")
+
 # capture_frame(False)
 # source_image = cv.imread(SOURCE_PATH)
 # image = cv.imread(IMAGE_PATH)
@@ -783,5 +784,6 @@ async def async_checkingq():
         for i in content_text.strip():
             if i is not None:
                 spell.word_frequency.add(i)
-    asyncio.run(process_visual())
+    final_result_image = await process_visual()
+    # await process_visual()
     cv.imwrite("Results/result.jpg", final_result_image)

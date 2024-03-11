@@ -1,2 +1,3 @@
-[{'topLeft': '707,533', 'bottomRight': '807,631', 'checkType': 's', 'result': 'False', 'checkingContent': ''}]
-[{'topLeft': '497,512', 'bottomRight': '604,574', 'checkType': 's', 'result': 'False', 'checkingContent': ''}]
+[{'topLeft': '483,557', 'bottomRight': '612,670', 'checkType': 's', 'result': 'True', 'checkingContent': ''}]
+[{'topLeft': '366,295', 'bottomRight': '528,446', 'checkType': 's', 'result': 'True', 'checkingContent': ''}]
+[{'topLeft': '729,521', 'bottomRight': '876,665', 'checkType': 's', 'result': 'True', 'checkingContent': ''}]

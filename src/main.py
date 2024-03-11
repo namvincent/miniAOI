@@ -12,6 +12,7 @@ import base64
 from Image_Processing import encode_image_to_base64
 from Object.Coordinates import Coordinates
 from Object.Coordinates import serialize_coordinates
+from async_checking import async_checkingq
 
 file_path = 'coordinate.txt'
 
@@ -232,7 +233,6 @@ def take_sample():
 # main(2)
 # main(0)
 # main(1)
- 
 # main(0)
 # Press the green button in the gutter to run the script.
 # if __name__ == '__main__':

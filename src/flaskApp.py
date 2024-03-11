@@ -1,14 +1,18 @@
 import subprocess
 import asyncio
+from flask_executor import Executor
 from flask import Flask, render_template
 from main import main,take_sample,TakeCoordinates
 from async_checking import async_checkingq
 
 app = Flask(__name__)
+executor = Executor(app)
 
 @app.route('/')
-def home():
-    return 'Hello, Flask on Raspberry Pi!'
+async def home():
+   
+    await async_checkingq()
+    return f"Command executed successfully"
 
 @app.route('/test')
 def test():
@@ -26,17 +30,21 @@ def ff():
     return 'ttt'
 
 @app.route('/dd')
-def dd():
+async def dd():
     # loop = asyncio.new_event_loop()
     # asyncio.set_event_loop(loop)
     # result = loop.run_until_complete(checking())
     
     asyncio.run(async_checkingq())
-    return 'result'
+
+    # future = executor.submit(checking())
+    # while not future.done():
+    #     asyncio.sleep(0.1)
+    # return 'll'
 
 async def checking():
     await async_checkingq()
     return 'done'
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0')
+    asyncio.run(app.run(debug=True, host='0.0.0.0'))
