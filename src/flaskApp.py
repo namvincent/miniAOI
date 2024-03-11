@@ -27,11 +27,12 @@ def ff():
 
 @app.route('/dd')
 def dd():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    result = loop.run_until_complete(checking())
-     
-    return result
+    # loop = asyncio.new_event_loop()
+    # asyncio.set_event_loop(loop)
+    # result = loop.run_until_complete(checking())
+    
+    asyncio.run(async_checkingq())
+    return 'result'
 
 async def checking():
     await async_checkingq()
