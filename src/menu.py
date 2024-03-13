@@ -1,6 +1,6 @@
 # This is a sample Python script.
 
-import json
+import json 
 
 import requests
 from ColorDetection import compare
@@ -137,8 +137,8 @@ def menu(name):
                 print("Failed to send data:", response.status_code)
                 print("Failed to send data:", response.request.body)
 
-async def TakeCoordinates():
-    partNo = "Test"
+async def TakeCoordinates(part_No):
+    partNo = part_No
     with open('SampleId.txt', 'r') as file:
         for line in file:
             id = int(line.strip())
@@ -204,7 +204,7 @@ async def TakeCoordinates():
         for item in result_list1:
             topLeft = item['topLeft']
             bottomRight = item['bottomRight']
-            file.write(f's,{topLeft},{bottomRight}\n')
+            file.write(f'c,{topLeft},{bottomRight}\n')
 
 async def take_sample():
     await capture_frame(True)
@@ -217,7 +217,7 @@ async def take_sample():
     data = json.dumps({
         "id": 0,
         "picture": picture,
-        "remark": "strwerwering"
+        "remark": "Test"
     })
     headers = {'Content-Type': 'application/json'}
     response = requests.post(url, data=data, headers=headers)

@@ -366,11 +366,13 @@ async def compare_color_and_save_mask(image, source, roi, threshold=90):
     top_left, bottom_right = roi
     region_width = bottom_right[0] - top_left[0]
     region_height = bottom_right[1] - top_left[1]
-
+    if source is None or image is None:
+        return False,roi
     # template_resized = cv.resize(source, (region_width, region_height))
     try:
         template_hsv = cv.cvtColor(source, cv.COLOR_BGR2HSV)
     except Exception as e:
+        return False,roi
         template_hsv = cv.cvtColor(
             cv.cvtColor(source, cv.COLOR_GRAY2BGR), cv.COLOR_BGR2HSV
         )
@@ -437,7 +439,7 @@ async def calculate_async(area):
     width = int(source_image.shape[1] * scale_percent / 100)
     height = int(source_image.shape[0] * scale_percent / 100)
 
-    offset = 2
+    offset = 3
     source_top_left = (max(0, top_left[0] - offset), max(0, top_left[1] - offset))
     source_bottom_right = (
         min(image.shape[1], bottom_right[0] + offset),
@@ -470,7 +472,7 @@ async def calculate_async(area):
     # image = cv.GaussianBlur(image, (5, 5), 0)
     if checking_type == "c":
         wrong_color, roi = await compare_color_and_save_mask(
-            image, partial_source_image, item, 90
+            image, partial_source_image, item, 70
         )
         top_left, bottom_right = roi
 
@@ -532,7 +534,7 @@ async def calculate_async(area):
         "checkingContent": checking_content,
     }
     final_data.append(tmp)
-    cv.imwrite(f"Results/{item}-result.jpg", partial_area_image)
+    cv.imwrite(f"Results/{checking_type}-{item}-result.jpg", partial_area_image)
     # # cv.imshow(partial_area_image)
 
     if False in final_result:
@@ -551,15 +553,17 @@ async def calculate_async(area):
     # )
 
     # # cv.imshow(final_result_image)
+   
     return tmp
 
-
+#global checking_results
 async def check_not_in_position(image, template, area, original_image):
     original_top_left, original_bottom_right = area
     captured_image = original_image[
         original_top_left[1] : original_bottom_right[1],
         original_top_left[0] : original_bottom_right[0],
     ]
+  
     target_image_gray = cv.cvtColor(captured_image, cv.COLOR_BGR2GRAY)
     image_gray = await convert_to_gray(image)
     template_gray = await convert_to_gray(template)
@@ -572,11 +576,14 @@ async def check_not_in_position(image, template, area, original_image):
         cv.TM_CCOEFF,
         cv.TM_SQDIFF,
     ]
+    checking_results = [50]
+    count = 0
     for method in methods:
+        
         res = cv.matchTemplate(image_gray, template_gray, method)
         _, max_val, max_loc, min_loc = cv.minMaxLoc(res)
         top_left = min_loc if method in [cv.TM_SQDIFF, cv.TM_SQDIFF_NORMED] else max_loc
-        threshold = 0.85
+        threshold = 0.9
         loc = np.where(res >= threshold)
         for pt in zip(*loc[::-1]):
             outer_top_left, bottom_right = await get_outer_top_left_and_bottom_right(
@@ -588,19 +595,46 @@ async def check_not_in_position(image, template, area, original_image):
             similar_area = await get_similar_area(
                 captured_image, top_left, bottom_right
             )
-            edge_difference, edges = await compare_features(
-                template_crop, similar_area, detect_edges
+            edge_difference, edges, can_check = await compare_features(
+                template_crop, image_gray, detect_edges
             )
-            corner_difference, corners = await compare_features(
-                template_crop, similar_area, detect_corners
+            corner_difference, corners, can_check = await compare_features(
+                template_crop, image_gray, detect_corners
             )
-            wrong_color, roi = await get_color(
-                edge_difference, corner_difference, similar_area, template_crop
-            )
-            if edge_difference < 5 and corner_difference < 9 and not wrong_color:
+            # wrong_color, roi = await get_color(
+            #     edge_difference, corner_difference, similar_area, template_crop
+            # )
+            # print(edge_difference)
+            # print(corners)
+            print(edge_difference)
+            print(corner_difference)
+             
+            cv.imwrite(f"Results/CORNERS-{method}{area}.jpg",corners)
+            cv.imwrite(f"Results/EDGES-{method}{area}.jpg",edges)
+            if edge_difference < 5 and corner_difference < 8:
+                cv.imwrite(f"Results/PASS-{method}{area}.jpg",image)
+                cv.imwrite(f"Results/PASS-{template}{area}.jpg",template)
+                checking_results[count] = False
+                count = count + 1
                 return False
-
-    return True
+               
+        # if zip(*loc[::-1]) is None:
+        #     cv.imwrite(f"Results/FAIL-{method}{area}.jpg",image)
+        #     cv.imwrite(f"Results/FAIL-{template}{area}.jpg",template)
+        #     checking_results[count] = True
+        #     count = count + 1
+        #     return True
+    return True           
+           
+      
+    #if True in checking_results:          
+    
+    #else:
+    # cv.imwrite(f"Results/FAIL-{method}{area}.jpg",image)
+    # cv.imwrite(f"Results/FAIL-{template}{area}.jpg",template)
+    #    return False
+        
+   
 
 
 async def convert_to_gray(image):
@@ -653,11 +687,15 @@ async def detect_edges(image):
 
 
 async def detect_corners(image):
-    gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
-    good_corners = cv.goodFeaturesToTrack(gray, 80, 0.01, 5)
-    good_corners = np.intp(good_corners)
-    corners = cv.cornerHarris(gray, 2, 3, 0.04)
-    corners = cv.dilate(corners, None)
+    try:
+        gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+        good_corners = cv.goodFeaturesToTrack(gray, 80, 0.01, 5)
+        good_corners = np.intp(good_corners)
+        corners = cv.cornerHarris(gray, 2, 3, 0.04)
+        corners = cv.dilate(corners, None)
+    except:
+        good_corners = 0
+        corners = 0
     return good_corners, corners
 
 
@@ -674,27 +712,32 @@ async def compare_features(image1, image2, feature_detector):
     tuple: A tuple containing the difference in feature counts and the modified image.
 
     """
-    if feature_detector == detect_edges:
-        # Create images to visualize the edges and corners
-        features1 = await feature_detector(image1)
-        features2 = await feature_detector(image2)
+    try:
+        if feature_detector == detect_edges:
+            # Create images to visualize the edges and corners
+            f1 = cv.Canny(image1, 100, 200)
+            f2 = cv.Canny(image2, 100, 200)
+            difference = abs(len(f1)-len(f2))
+        else:
+            f1 = cv.Canny(image1, 100, 200)
+            f2 = cv.Canny(image2, 100, 200)
+            difference = abs(len(f1)-len(f2))
+            # f1 = cv.goodFeaturesToTrack(image1, 200, 0.01, 5)
+            # f1 = np.intp(f1)
+            # f2 = cv.goodFeaturesToTrack(image2, 200, 0.01, 5)
+            # f2 = np.intp(f2)
+            # difference = abs(f1-f2)
+        # Here you can add your logic to compare the features
+        # For simplicity, just comparing the count of features
+        if len(f1) == 0:
+            difference = 100000
+    except Exception:
+      
         image = image2.copy()
-        image[features2 > 0.01 * features2.max()] = [0, 0, 0]
-    else:
-        features1, corners1 = await feature_detector(image1)
-        features2, corners2 = await feature_detector(image2)
-        # Create images to visualize the edges and corners
-        image = image2.copy()
-        image[corners2 > 0.01 * corners2.max()] = [0, 0, 0]
-    # Here you can add your logic to compare the features
-    # For simplicity, just comparing the count of features
-    if len(features1) == 0:
-        difference = 555
-    else:
-        total_f1 = len(features1)
-        difference = abs(total_f1 - len(features2))
-
-    return difference, image
+        difference = 1000000
+        return difference, image, 0
+       
+    return difference, f2, 1
 
 
 async def find_best_ocr_result(ocr_results):
@@ -780,10 +823,10 @@ async def process_visual():
     main_tasks = [calculate_async(area) for area in checking_areas]
     finish = await asyncio.gather(*main_tasks)
     # finish = await asyncio.gather(result)
-    with open("ocr_result.txt", "w") as File:
-        for item in finish:
-            if item is not None:
-                File.write(str(item) + "\n")
+    # with open("ocr_result.txt", "w") as File:
+    #     for item in finish:
+    #         if item is not None:
+    #             File.write(str(item) + "\n")
     return finish
 
 # asyncio.run(process_visual())
@@ -792,7 +835,7 @@ async def process_visual():
 async def async_checking():
     global image,source_image
     global final_result_image
-    await capture_frame(False)
+    #await capture_frame(False)
     source_image = cv.imread(SOURCE_PATH)
     image = cv.imread(IMAGE_PATH)
     final_result_image = image.copy()
@@ -805,7 +848,6 @@ async def async_checking():
         for i in content_text.strip():
             if i is not None:
                 spell.word_frequency.add(i)    
-    # asyncio.run(process_visual())
     final_data_list = await process_visual()
     visual_data_json = json.dumps(final_data_list)
     cv.imwrite("Results/result.jpg", final_result_image)

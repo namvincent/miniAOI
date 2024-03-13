@@ -1,7 +1,7 @@
 import subprocess
 import asyncio
 from flask_cors import CORS
-from flask import Flask, render_template
+from flask import Flask, render_template,request
 from menu import menu,take_sample,TakeCoordinates
 from async_checking import async_checking
 
@@ -24,27 +24,16 @@ def test():
 
 @app.route('/takeSample')
 async def takeSample():
+    partNo = request.args.get('partNo')
     await take_sample()
-    await TakeCoordinates()
+    await TakeCoordinates(partNo)
     return 'Finish!'
 
 @app.get('/visualInspection')
-async def visualInspection():
-    # loop = asyncio.new_event_loop()
-    # asyncio.set_event_loop(loop)
-    # result = loop.run_until_complete(checking())
-    
+async def visualInspection():          
     result = await async_checking()
-
-    # future = executor.submit(checking())
-    # while not future.done():
-    #     asyncio.sleep(0.1)
     return result
 
-async def checking():
-    await async_checking()
-    return 'done'
-
 if __name__ == '__main__':
-    app.run(debug=False, host='0.0.0.0')
+    app.run(debug=True, host='0.0.0.0')
     # app.run(debug=True, host='0.0.0.0',ssl_context=('cert19.pem', 'key19.pem'))

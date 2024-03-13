@@ -86,7 +86,7 @@ def select(image_path):
     cv2.setMouseCallback(current_datetime_str,draw_rectangle)    
     while True:
         cv2.imshow(current_datetime_str,original_image)
-        if cv2.waitKey(0) & 0xFF == ord('q') or done == True:
+        if cv2.waitKey(1) & 0xFF == ord('q') or done:
             break
     
     first = False

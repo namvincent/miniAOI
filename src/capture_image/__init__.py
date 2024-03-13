@@ -13,7 +13,7 @@ async def capture_frame(source):
     ffmpeg_cmd = [
         "libcamera-still",
         "--timeout",
-        "1000",
+        "500",
         "--width",
         "1000",
         "--height",
