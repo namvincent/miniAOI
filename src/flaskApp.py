@@ -28,7 +28,7 @@ async def takeSample():
     await TakeCoordinates()
     return 'Finish!'
 
-@app.route('/visualInspection')
+@app.get('/visualInspection')
 async def visualInspection():
     # loop = asyncio.new_event_loop()
     # asyncio.set_event_loop(loop)
@@ -46,4 +46,5 @@ async def checking():
     return 'done'
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0')
+    app.run(debug=False, host='0.0.0.0')
+    # app.run(debug=True, host='0.0.0.0',ssl_context=('cert19.pem', 'key19.pem'))
