@@ -599,7 +599,7 @@ async def check_not_in_position(image, template, area, original_image):
                 template_crop, image_gray, detect_edges
             )
             corner_difference, corners, can_check = await compare_features(
-                template_crop, image_gray, detect_corners
+                template_crop, image, detect_corners
             )
             # wrong_color, roi = await get_color(
             #     edge_difference, corner_difference, similar_area, template_crop
@@ -611,7 +611,7 @@ async def check_not_in_position(image, template, area, original_image):
              
             cv.imwrite(f"Results/CORNERS-{method}{area}.jpg",corners)
             cv.imwrite(f"Results/EDGES-{method}{area}.jpg",edges)
-            if edge_difference < 5 and corner_difference < 8:
+            if edge_difference < 15 and corner_difference < 15:
                 cv.imwrite(f"Results/PASS-{method}{area}.jpg",image)
                 cv.imwrite(f"Results/PASS-{template}{area}.jpg",template)
                 checking_results[count] = False
@@ -719,20 +719,22 @@ async def compare_features(image1, image2, feature_detector):
             f2 = cv.Canny(image2, 100, 200)
             difference = abs(len(f1)-len(f2))
         else:
-            f1 = cv.Canny(image1, 100, 200)
-            f2 = cv.Canny(image2, 100, 200)
+          
+            f1, corner1 = await detect_corners(image1)
+            f2, corner2 = await detect_corners(image2)
             difference = abs(len(f1)-len(f2))
             # f1 = cv.goodFeaturesToTrack(image1, 200, 0.01, 5)
             # f1 = np.intp(f1)
             # f2 = cv.goodFeaturesToTrack(image2, 200, 0.01, 5)
             # f2 = np.intp(f2)
             # difference = abs(f1-f2)
+            f2 = corner1
         # Here you can add your logic to compare the features
         # For simplicity, just comparing the count of features
         if len(f1) == 0:
             difference = 100000
-    except Exception:
-      
+    except Exception as e:
+        print(e)
         image = image2.copy()
         difference = 1000000
         return difference, image, 0
