@@ -583,7 +583,7 @@ async def check_not_in_position(image, template, area, original_image):
         res = cv.matchTemplate(image_gray, template_gray, method)
         _, max_val, max_loc, min_loc = cv.minMaxLoc(res)
         top_left = min_loc if method in [cv.TM_SQDIFF, cv.TM_SQDIFF_NORMED] else max_loc
-        threshold = 0.9
+        threshold = 0.85
         loc = np.where(res >= threshold)
         for pt in zip(*loc[::-1]):
             outer_top_left, bottom_right = await get_outer_top_left_and_bottom_right(
@@ -601,29 +601,37 @@ async def check_not_in_position(image, template, area, original_image):
             corner_difference, corners, can_check = await compare_features(
                 template_crop, image, detect_corners
             )
-            # wrong_color, roi = await get_color(
-            #     edge_difference, corner_difference, similar_area, template_crop
-            # )
+            wrong_color, roi = await get_color(
+                edge_difference, corner_difference, similar_area, template_crop
+            )
             # print(edge_difference)
             # print(corners)
-            print(edge_difference)
-            print(corner_difference)
+            
              
             cv.imwrite(f"Results/CORNERS-{method}{area}.jpg",corners)
             cv.imwrite(f"Results/EDGES-{method}{area}.jpg",edges)
-            if edge_difference < 15 and corner_difference < 15:
+            if edge_difference < 10 and corner_difference < 10 and not wrong_color:
                 cv.imwrite(f"Results/PASS-{method}{area}.jpg",image)
                 cv.imwrite(f"Results/PASS-{template}{area}.jpg",template)
                 checking_results[count] = False
                 count = count + 1
+                print(pt)
+                print(edge_difference)
+                print(corner_difference)
+                print(wrong_color)
                 return False
                
         # if zip(*loc[::-1]) is None:
-        #     cv.imwrite(f"Results/FAIL-{method}{area}.jpg",image)
-        #     cv.imwrite(f"Results/FAIL-{template}{area}.jpg",template)
+            
         #     checking_results[count] = True
         #     count = count + 1
         #     return True
+    print(pt)
+    print(edge_difference)
+    print(corner_difference)
+    print(wrong_color)
+    cv.imwrite(f"Results/FAIL-{method}{area}.jpg",image)
+    cv.imwrite(f"Results/FAIL-{template}{area}.jpg",template)
     return True           
            
       
@@ -728,10 +736,10 @@ async def compare_features(image1, image2, feature_detector):
             # f2 = cv.goodFeaturesToTrack(image2, 200, 0.01, 5)
             # f2 = np.intp(f2)
             # difference = abs(f1-f2)
-            f2 = corner1
+            f2 = corner2
         # Here you can add your logic to compare the features
         # For simplicity, just comparing the count of features
-        if len(f1) == 0:
+        if len(f2) == 0:
             difference = 100000
     except Exception as e:
         print(e)
@@ -837,7 +845,7 @@ async def process_visual():
 async def async_checking():
     global image,source_image
     global final_result_image
-    #await capture_frame(False)
+    await capture_frame(False)
     source_image = cv.imread(SOURCE_PATH)
     image = cv.imread(IMAGE_PATH)
     final_result_image = image.copy()

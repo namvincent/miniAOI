@@ -204,7 +204,7 @@ async def TakeCoordinates(part_No):
         for item in result_list1:
             topLeft = item['topLeft']
             bottomRight = item['bottomRight']
-            file.write(f'c,{topLeft},{bottomRight}\n')
+            file.write(f's,{topLeft},{bottomRight}\n')
 
 async def take_sample():
     await capture_frame(True)

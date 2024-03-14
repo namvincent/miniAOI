@@ -15,7 +15,7 @@ async def capture_frame(source):
         "--timeout",
         "500",
         "--width",
-        "1000",
+        "1500",
         "--height",
         "1000",
         # "--autofocus-mode",
