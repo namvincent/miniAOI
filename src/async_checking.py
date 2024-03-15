@@ -184,47 +184,47 @@ async def aoi(area):
     return None
 
 
-async def process_image(image):
-    ocr_result_final = []
-    ocr_result = []
-    longest = ""
+# async def process_image(image):
+#     ocr_result_final = []
+#     ocr_result = []
+#     longest = ""
 
-    img_resized = await preprocess_image(image)
+#     img_resized = await preprocess_image(image)
 
-    thresh = 30
-    while thresh < 180:
-        ocr_result = []
-        thresh += 20
-        img_adjust = await adjust_image(img_resized, thresh)
-        #text = await extract_text_from_image(img_adjust)
-        if text is None or text == "" or longest == "" or longest is None:
-            continue
-        if len(text) > len(longest):
-            longest = text
-        idx = False
-        if text is not None:
-            ocr_result.append(text)
-            try:
-                idx = content_text.find(text)
-            except Exception as e:
-                print(e)
+#     thresh = 30
+#     while thresh < 180:
+#         ocr_result = []
+#         thresh += 20
+#         img_adjust = await adjust_image(img_resized, thresh)
+#         #text = await extract_text_from_image(img_adjust)
+#         if text is None or text == "" or longest == "" or longest is None:
+#             continue
+#         if len(text) > len(longest):
+#             longest = text
+#         idx = False
+#         if text is not None:
+#             ocr_result.append(text)
+#             try:
+#                 idx = content_text.find(text)
+#             except Exception as e:
+#                 print(e)
 
-            if idx > 0:
-                print(f"OK: {text}")
-                ocr = await find_best_ocr_result(ocr_result)
-                await ocr_result_final.append(ocr)
-                break
+#             if idx > 0:
+#                 print(f"OK: {text}")
+#                 ocr = await find_best_ocr_result(ocr_result)
+#                 await ocr_result_final.append(ocr)
+#                 break
 
-            if ocr_result:
-                longest = spell.correction(longest)
-                ocr = longest
-                ocr_result.append(longest)
+#             if ocr_result:
+#                 longest = spell.correction(longest)
+#                 ocr = longest
+#                 ocr_result.append(longest)
 
-    if ocr_result_final:
-        ocr = spell.correction(longest)
-        return ocr
+#     if ocr_result_final:
+#         ocr = spell.correction(longest)
+#         return ocr
 
-    return None
+#     return None
 
 
 async def preprocess_image(image):
@@ -432,13 +432,13 @@ async def calculate_async(area):
     # source_bottom_right_y: int = int(item.strip().split(',')[3]+5)
 
     # Set the desired percentage of resizing
-    scale_percent = 40  # Adjust this value to the desired percentage
+    scale_percent = 100  # Adjust this value to the desired percentage
 
     # Calculate the new dimensions based on the percentage
     width = int(source_image.shape[1] * scale_percent / 100)
     height = int(source_image.shape[0] * scale_percent / 100)
 
-    offset = 3
+    offset = 2
     source_top_left = (max(0, top_left[0] - offset), max(0, top_left[1] - offset))
     source_bottom_right = (
         min(image.shape[1], bottom_right[0] + offset),
@@ -471,7 +471,7 @@ async def calculate_async(area):
     # image = cv.GaussianBlur(image, (5, 5), 0)
     if checking_type == "c":
         wrong_color, roi = await compare_color_and_save_mask(
-            image, partial_source_image, item, 70
+            image, partial_source_image, item, 90
         )
         top_left, bottom_right = roi
 
@@ -521,7 +521,10 @@ async def calculate_async(area):
     _, sample_encoded_image = cv.imencode(".jpg", resized_source_image)
     image_bytes = encoded_image.tobytes()
     sample_image_bytes = sample_encoded_image.tobytes()
-    checking_content = pytesseract.image_to_string(partial_area_image)
+    #checking_content = pytesseract.image_to_string(Image.fromarray(image), lang="eng", timeout=10)
+    if checking_content is None or checking_content =='':
+        checking_content = 'OCR not success'
+
     tmp = {
         "topLeft": f"{item[0][0]},{item[0][1]}",
         "bottomRight": f"{item[1][0]},{item[1][1]}",
@@ -568,15 +571,16 @@ async def check_not_in_position(image, template, area, original_image):
     template_gray = await convert_to_gray(template)
     w, h = target_image_gray.shape[::-1]
     methods = [
-        cv.TM_CCOEFF_NORMED,
-        cv.TM_CCORR_NORMED,
-        cv.TM_SQDIFF_NORMED,
-        cv.TM_CCORR,
-        cv.TM_CCOEFF,
+        # cv.TM_CCOEFF_NORMED,
+        # cv.TM_CCORR_NORMED,
+        # cv.TM_SQDIFF_NORMED,
+        # cv.TM_CCORR,
+        # cv.TM_CCOEFF,
         cv.TM_SQDIFF,
     ]
     checking_results = [50]
     count = 0
+    wrong_color = True
     for method in methods:
         
         res = cv.matchTemplate(image_gray, template_gray, method)
@@ -594,22 +598,27 @@ async def check_not_in_position(image, template, area, original_image):
             similar_area = await get_similar_area(
                 captured_image, top_left, bottom_right
             )
-            edge_difference, edges, can_check = await compare_features(
+            edge_difference, origin_edges, edges, can_check = await compare_features(
                 template_crop, image_gray, detect_edges
             )
-            corner_difference, corners, can_check = await compare_features(
+            corner_difference, origin_corners, corners, can_check = await compare_features(
                 template_crop, image, detect_corners
             )
             wrong_color, roi = await get_color(
                 edge_difference, corner_difference, similar_area, template_crop
             )
-            # print(edge_difference)
+          
             # print(corners)
             
              
-            cv.imwrite(f"Results/CORNERS-{method}{area}.jpg",corners)
-            cv.imwrite(f"Results/EDGES-{method}{area}.jpg",edges)
-            if edge_difference < 10 and corner_difference < 10 and not wrong_color:
+            cv.imwrite(f"Results/shapes/origin/CORNERS-{method}{area}.jpg",origin_corners)
+            cv.imwrite(f"Results/shapes/origin/EDGES-{method}{area}.jpg",origin_edges) 
+            cv.imwrite(f"Results/shapes/CORNERS-{method}{area}.jpg",corners)
+            cv.imwrite(f"Results/shapes/EDGES-{method}{area}.jpg",edges)
+
+
+
+            if edge_difference > 0.75:
                 cv.imwrite(f"Results/PASS-{method}{area}.jpg",image)
                 cv.imwrite(f"Results/PASS-{template}{area}.jpg",template)
                 checking_results[count] = False
@@ -617,7 +626,7 @@ async def check_not_in_position(image, template, area, original_image):
                 print(pt)
                 print(edge_difference)
                 print(corner_difference)
-                print(wrong_color)
+                # print(wrong_color)
                 return False
                
         # if zip(*loc[::-1]) is None:
@@ -628,7 +637,8 @@ async def check_not_in_position(image, template, area, original_image):
     print(pt)
     print(edge_difference)
     print(corner_difference)
-    print(wrong_color)
+    print(f'wrong color {wrong_color}')
+    # print(wrong_color)
     cv.imwrite(f"Results/FAIL-{method}{area}.jpg",image)
     cv.imwrite(f"Results/FAIL-{template}{area}.jpg",template)
     return True           
@@ -674,7 +684,7 @@ async def get_similar_area(captured_image, outer_top_left, bottom_right):
 
 async def get_color(edge_difference, corner_difference, similar_area, template_crop):
     wrong_color, roi = await compare_color_and_save_mask(
-        similar_area, template_crop, None, 90
+        similar_area, template_crop, None, 60
     )
     return wrong_color, roi
     # if edge_difference < 5 and corner_difference < 10:
@@ -688,15 +698,15 @@ async def detect_edges(image):
         gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
     except:
         gray = image
-    blurred = cv.GaussianBlur(gray, (5, 5), 0)
-    edges = cv.Canny(blurred, 50, 150)
+    blurred = cv.GaussianBlur(gray, (5, 5), 0.1)
+    edges = cv.Canny(blurred,10, 180)
     return edges
 
 
 async def detect_corners(image):
     try:
         gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
-        good_corners = cv.goodFeaturesToTrack(gray, 80, 0.01, 5)
+        good_corners = cv.goodFeaturesToTrack(gray, 80, 0.01, 200)
         good_corners = np.intp(good_corners)
         corners = cv.cornerHarris(gray, 2, 3, 0.04)
         corners = cv.dilate(corners, None)
@@ -724,29 +734,40 @@ async def compare_features(image1, image2, feature_detector):
             # Create images to visualize the edges and corners
             f1 = cv.Canny(image1, 100, 200)
             f2 = cv.Canny(image2, 100, 200)
-            difference = abs(len(f1)-len(f2))
+            if len(f1) > len(f2):
+                difference = (len(f2)/len(f1))
+                print(f"f1: {f1}\n")
+                print(f"f2: {f2}\n")
+            else:
+                difference = (len(f1)/len(f2))
+                print(f"f1: {f1}\n")
+                print(f"f2: {f2}\n")
+            if len(f2) == 0:
+                difference = 1000000
         else:
           
             f1, corner1 = await detect_corners(image1)
             f2, corner2 = await detect_corners(image2)
-            difference = abs(len(f1)-len(f2))
+            try:
+                difference = abs(len(f1)-len(f2))
+            except:
+                difference = f1 - f2
             # f1 = cv.goodFeaturesToTrack(image1, 200, 0.01, 5)
             # f1 = np.intp(f1)
             # f2 = cv.goodFeaturesToTrack(image2, 200, 0.01, 5)
             # f2 = np.intp(f2)
             # difference = abs(f1-f2)
             f2 = corner2
-        # Here you can add your logic to compare the features
-        # For simplicity, just comparing the count of features
-        if len(f2) == 0:
-            difference = 1000000
+            # Here you can add your logic to compare the features
+            # For simplicity, just comparing the count of features
+            if (corner2 == 0 and corner1 > 0):
+                difference = 1000000
     except Exception as e:
         print(e)
         image = image2.copy()
         difference = 1000000
-        return difference, image, 0
-       
-    return difference, f2, 1
+        return difference,image1, image, 0
+    return difference, f1, f2, 1
 
 
 async def find_best_ocr_result(ocr_results):
@@ -830,6 +851,7 @@ async def process_visual():
 
     #ocr_array = asyncio.gather(*tasks)
     main_tasks = [calculate_async(area) for area in checking_areas]
+ 
     finish = await asyncio.gather(*main_tasks)
     # finish = await asyncio.gather(result)
     # with open("ocr_result.txt", "w") as File:
@@ -842,7 +864,7 @@ async def process_visual():
 # cv.imwrite("Results/result.jpg", final_result_image)
 
 async def async_checking():
-    pytesseract.add_special_words_to_dictionary('dictionary.txt')
+    
     global image,source_image
     global final_result_image
     await capture_frame(False)
@@ -861,4 +883,9 @@ async def async_checking():
     final_data_list = await process_visual()
     visual_data_json = json.dumps(final_data_list)
     cv.imwrite("Results/result.jpg", final_result_image)
+    image = Image.open('Results/result.jpg')
+
+    # Use Tesseract to do OCR on the image
+    text = pytesseract.image_to_string(image, lang='eng')
+    print(text)
     return visual_data_json
