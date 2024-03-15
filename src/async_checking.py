@@ -509,7 +509,8 @@ async def calculate_async(area):
         cv.rectangle(return_source_image, top_left, bottom_right, final_color, 3)
         resized_source_image = cv.resize(return_source_image, (width, height))
         resized_image = cv.resize(return_image, (width, height))
-        checking_content = await extract_text_from_image(partial_image)
+      
+      
 
         final_result_image = await add_unicode_text_to_image(
             final_result_image,
@@ -523,6 +524,7 @@ async def calculate_async(area):
     _, sample_encoded_image = cv.imencode(".jpg", resized_source_image)
     image_bytes = encoded_image.tobytes()
     sample_image_bytes = sample_encoded_image.tobytes()
+    checking_content = pytesseract.image_to_string(image)
     tmp = {
         "topLeft": f"{item[0][0]},{item[0][1]}",
         "bottomRight": f"{item[1][0]},{item[1][1]}",
@@ -553,7 +555,7 @@ async def calculate_async(area):
     # )
 
     # # cv.imshow(final_result_image)
-   
+    
     return tmp
 
 #global checking_results
@@ -827,9 +829,9 @@ contents = None
 async def process_visual():
     final_data = []
     checking_areas = await read_out_locations_need_to_be_checked(COORDINATE_FILE_PATH)
-    # tasks = [aoi(area) for area in filter(lambda x: x[0] == "s", checking_areas)]
+    #tasks = [aoi(area) for area in filter(lambda x: x[0] == "dc", checking_areas)]
 
-    # ocr_array = asyncio.gather(*tasks)
+    #ocr_array = asyncio.gather(*tasks)
     main_tasks = [calculate_async(area) for area in checking_areas]
     finish = await asyncio.gather(*main_tasks)
     # finish = await asyncio.gather(result)

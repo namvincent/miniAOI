@@ -1,9 +1,20 @@
-24V=
-Output | Salida | Sortie
-100 - 277 V~
-Input | Entrada | Entrée
-LUTRON
-QSPS-DH-1-75
-22.5 - 25.0 V=
-L(-) N(+)
-+ + - -
+Input: 100-240V-/50-60Hz/600-300mA
+Output: 12V - /2500mA
+EP29-32777
+Type: FW8030M/12
+Made in Vietnam
+스
+FRIWO Gerätebau GmbH
+Von-Liebig-Straße 11
+Kodier YNA
+48346 Ostbever
+Keeler
+CAUTION:
+SLA 4AA
+RISK OF ELECTRICAL SHOCK DRY LOCATION USE ONLY ATTENTION:
+RISQUE DE CHOC ELECTRIQUE POUR ENDROIT SEC SEULEMENT
+CE
+SIS
+
+VI
+1124V
