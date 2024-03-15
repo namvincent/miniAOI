@@ -196,7 +196,7 @@ async def process_image(image):
         ocr_result = []
         thresh += 20
         img_adjust = await adjust_image(img_resized, thresh)
-        text = await extract_text_from_image(img_adjust)
+        #text = await extract_text_from_image(img_adjust)
         if text is None or text == "" or longest == "" or longest is None:
             continue
         if len(text) > len(longest):
@@ -270,8 +270,7 @@ async def extract_text_from_image(image):
     markup3 = None
     img = Image.fromarray(image)
     count += 1
-    #
-    text = pytesseract.image_to_string(img)
+    #text = pytesseract.image_to_string(img)
     img.save(f"ocr{count}.jpg")
     print(text)
     if text != "" and text is not None:
@@ -510,8 +509,6 @@ async def calculate_async(area):
         resized_source_image = cv.resize(return_source_image, (width, height))
         resized_image = cv.resize(return_image, (width, height))
       
-      
-
         final_result_image = await add_unicode_text_to_image(
             final_result_image,
             str(checking_content),
@@ -524,7 +521,7 @@ async def calculate_async(area):
     _, sample_encoded_image = cv.imencode(".jpg", resized_source_image)
     image_bytes = encoded_image.tobytes()
     sample_image_bytes = sample_encoded_image.tobytes()
-    checking_content = pytesseract.image_to_string(image)
+    checking_content = pytesseract.image_to_string(partial_area_image)
     tmp = {
         "topLeft": f"{item[0][0]},{item[0][1]}",
         "bottomRight": f"{item[1][0]},{item[1][1]}",
@@ -742,7 +739,7 @@ async def compare_features(image1, image2, feature_detector):
         # Here you can add your logic to compare the features
         # For simplicity, just comparing the count of features
         if len(f2) == 0:
-            difference = 100000
+            difference = 1000000
     except Exception as e:
         print(e)
         image = image2.copy()
@@ -845,6 +842,7 @@ async def process_visual():
 # cv.imwrite("Results/result.jpg", final_result_image)
 
 async def async_checking():
+    pytesseract.add_special_words_to_dictionary('dictionary.txt')
     global image,source_image
     global final_result_image
     await capture_frame(False)
