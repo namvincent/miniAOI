@@ -10,6 +10,7 @@ from PIL import Image, ImageFont, ImageDraw
 from spellchecker import SpellChecker
 from capture_image import capture_frame, take_picture, raspi_io
 from Object.VisualResult import serialize_visual_data
+import os
 
 
 async def read_out_locations_need_to_be_checked(coordinate_file_path):
@@ -432,7 +433,7 @@ async def calculate_async(area):
     # source_bottom_right_y: int = int(item.strip().split(',')[3]+5)
 
     # Set the desired percentage of resizing
-    scale_percent = 100  # Adjust this value to the desired percentage
+    scale_percent = 70  # Adjust this value to the desired percentage
 
     # Calculate the new dimensions based on the percentage
     width = int(source_image.shape[1] * scale_percent / 100)
@@ -496,10 +497,17 @@ async def calculate_async(area):
         wrong_position = await check_not_in_position(
             partial_area_image, partial_source_image, item, image
         )
+
         if not wrong_position:
             result = True
             final_color = (0, 255, 0)
         else:
+            result = False
+            final_color = (0, 0, 255)
+        # checking_content = pytesseract.image_to_string(Image.fromarray(partial_area_image), lang="eng", timeout=10)
+        checking_content =  read_text_from_image(partial_area_image)
+        if checking_content.strip(' \n\x0c') is None or checking_content.strip(' \n\x0c')  =='':
+            checking_content = 'OCR not success'
             result = False
             final_color = (0, 0, 255)
         final_result.append(result)
@@ -521,9 +529,7 @@ async def calculate_async(area):
     _, sample_encoded_image = cv.imencode(".jpg", resized_source_image)
     image_bytes = encoded_image.tobytes()
     sample_image_bytes = sample_encoded_image.tobytes()
-    #checking_content = pytesseract.image_to_string(Image.fromarray(image), lang="eng", timeout=10)
-    if checking_content is None or checking_content =='':
-        checking_content = 'OCR not success'
+   
 
     tmp = {
         "topLeft": f"{item[0][0]},{item[0][1]}",
@@ -538,7 +544,7 @@ async def calculate_async(area):
     final_data.append(tmp)
     cv.imwrite(f"Results/{checking_type}-{item}-result.jpg", partial_area_image)
     # # cv.imshow(partial_area_image)
-
+    
     if False in final_result:
         print("Defected")
         visual_inspection_result = "FAIL"
@@ -623,7 +629,7 @@ async def check_not_in_position(image, template, area, original_image):
                 cv.imwrite(f"Results/PASS-{template}{area}.jpg",template)
                 checking_results[count] = False
                 count = count + 1
-                print(pt)
+                # print(pt)
                 print(edge_difference)
                 print(corner_difference)
                 # print(wrong_color)
@@ -634,7 +640,7 @@ async def check_not_in_position(image, template, area, original_image):
         #     checking_results[count] = True
         #     count = count + 1
         #     return True
-    print(pt)
+    # print(pt)
     print(edge_difference)
     print(corner_difference)
     print(f'wrong color {wrong_color}')
@@ -736,12 +742,12 @@ async def compare_features(image1, image2, feature_detector):
             f2 = cv.Canny(image2, 100, 200)
             if len(f1) > len(f2):
                 difference = (len(f2)/len(f1))
-                print(f"f1: {f1}\n")
-                print(f"f2: {f2}\n")
+                # print(f"f1: {f1}\n")
+                # print(f"f2: {f2}\n")
             else:
                 difference = (len(f1)/len(f2))
-                print(f"f1: {f1}\n")
-                print(f"f2: {f2}\n")
+                # print(f"f1: {f1}\n")
+                # print(f"f2: {f2}\n")
             if len(f2) == 0:
                 difference = 1000000
         else:
@@ -867,7 +873,8 @@ async def async_checking():
     
     global image,source_image
     global final_result_image
-    await capture_frame(False)
+    await delete_files_in_directory("Results")
+    # await capture_frame(False)
     source_image = cv.imread(SOURCE_PATH)
     image = cv.imread(IMAGE_PATH)
     final_result_image = image.copy()
@@ -886,6 +893,45 @@ async def async_checking():
     image = Image.open('Results/result.jpg')
 
     # Use Tesseract to do OCR on the image
-    text = pytesseract.image_to_string(image, lang='eng')
-    print(text)
+    # text = pytesseract.image_to_string(image, lang='eng')
+    # print(text)
     return visual_data_json
+
+async def delete_files_in_directory(directory):
+     # Traverse the directory recursively
+    for root, dirs, files in os.walk(directory):
+        # Iterate through all files in the current directory
+        for file in files:
+            file_path = os.path.join(root, file)
+            try:
+                # Attempt to remove the file
+                os.remove(file_path)
+                print(f"Deleted file: {file_path}")
+            except Exception as e:
+                # Print an error message if deletion fails
+                print(f"Error deleting file: {file_path}, {e}")
+
+        # Iterate through all subdirectories in the current directory
+        for dir in dirs:
+            dir_path = os.path.join(root, dir)
+            try:
+                # Attempt to remove the directory
+                os.rmdir(dir_path)
+                print(f"Deleted directory: {dir_path}")
+            except Exception as e:
+                # Print an error message if deletion fails
+                print(f"Error deleting directory: {dir_path}, {e}")
+
+def read_text_from_image(image99):
+    # Load the image
+    # image99 = cv.imread(path)
+    
+    # Convert the image to grayscale
+    # Convert to grayscale
+    gray = cv.cvtColor(image99, cv.COLOR_BGR2GRAY)
+    cv.imwrite('Results/grayScale.jpg',gray)
+    # Apply adaptive thresholding
+    _, thresh = cv.threshold(gray, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+    # Perform OCR on the thresholded image
+    text = pytesseract.image_to_string(thresh)
+    return text
