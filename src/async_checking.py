@@ -11,6 +11,7 @@ from spellchecker import SpellChecker
 from capture_image import capture_frame, take_picture, raspi_io
 from Object.VisualResult import serialize_visual_data
 import os
+from skimage.metrics import structural_similarity as ssim
 
 
 async def read_out_locations_need_to_be_checked(coordinate_file_path):
@@ -303,8 +304,8 @@ async def find_best_ocr_result(ocr_result):
 async def add_unicode_text_to_image(
     image_cv, text, position, font_path, font_size, text_color=None, bg_color=(0, 0, 0)
 ):
-    if text_color is None:
-        text_color = random_color()
+    # if text_color is None:
+    #     text_color = random_color()
     """
     Adds Unicode text with a background to an image at the specified position.
 
@@ -439,7 +440,7 @@ async def calculate_async(area):
     width = int(source_image.shape[1] * scale_percent / 100)
     height = int(source_image.shape[0] * scale_percent / 100)
 
-    offset = 2
+    offset = 0
     source_top_left = (max(0, top_left[0] - offset), max(0, top_left[1] - offset))
     source_bottom_right = (
         min(image.shape[1], bottom_right[0] + offset),
@@ -472,19 +473,27 @@ async def calculate_async(area):
     # image = cv.GaussianBlur(image, (5, 5), 0)
     if checking_type == "c":
         wrong_color, roi = await compare_color_and_save_mask(
-            image, partial_source_image, item, 90
+            image, partial_source_image, item, 70
         )
         top_left, bottom_right = roi
-
+        scikit_detect = scikit_image(partial_source_image,partial_area_image)
+        squared_detect = squared_error(partial_source_image,partial_area_image)
         # wrong_color = is_similar(image, source_image)
         # wrong_color, color_mask = check_wrong_color(partial_image, red_color_ranges)
-        print(f"Wrong Color: {wrong_color}")
-        if not wrong_color:
+
+        # print(f"Wrong Color: {wrong_color}")
+        # if not wrong_color:
+        #     result = True
+        #     final_color = (0, 255, 0)
+        # else:
+        #     result = False
+        #     final_color = (0, 0, 255)
+        if squared_detect < 85:
             result = True
             final_color = (0, 255, 0)
         else:
             result = False
-            final_color = (0, 0, 255)
+            final_color = (0, 0, 255)        
         final_result.append(result)
         
         cv.rectangle(return_image, top_left, bottom_right, final_color, 3)
@@ -506,6 +515,8 @@ async def calculate_async(area):
             final_color = (0, 0, 255)
         # checking_content = pytesseract.image_to_string(Image.fromarray(partial_area_image), lang="eng", timeout=10)
         checking_content =  read_text_from_image(partial_area_image)
+        if checking_content.strip(' \n\x0c') is None or checking_content.strip(' \n\x0c')  =='':
+            checking_content = pytesseract.image_to_string(Image.fromarray(partial_area_image), lang="eng", timeout=10)            
         if checking_content.strip(' \n\x0c') is None or checking_content.strip(' \n\x0c')  =='':
             checking_content = 'OCR not success'
             result = False
@@ -539,7 +550,7 @@ async def calculate_async(area):
         "finalResultImage": base64.b64encode(image_bytes).decode(),
         "sampleImage" :base64.b64encode(sample_image_bytes).decode(),
         # 'finalResultImage': '',
-        "checkingContent": checking_content,
+        "checkingContent": checking_content.strip(' \n\x0c'),
     }
     final_data.append(tmp)
     cv.imwrite(f"Results/{checking_type}-{item}-result.jpg", partial_area_image)
@@ -874,7 +885,7 @@ async def async_checking():
     global image,source_image
     global final_result_image
     await delete_files_in_directory("Results")
-    # await capture_frame(False)
+    await capture_frame(False)
     source_image = cv.imread(SOURCE_PATH)
     image = cv.imread(IMAGE_PATH)
     final_result_image = image.copy()
@@ -930,8 +941,49 @@ def read_text_from_image(image99):
     # Convert to grayscale
     gray = cv.cvtColor(image99, cv.COLOR_BGR2GRAY)
     cv.imwrite('Results/grayScale.jpg',gray)
+    
+    
     # Apply adaptive thresholding
     _, thresh = cv.threshold(gray, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+
+    # # Apply Gaussian blur and adaptive thresholding
+    # blur = cv.GaussianBlur(gray, (5, 5), 0)
+    # thresh = cv.adaptiveThreshold(blur, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 4)
+
+    # Perform OCR on the thresholded image with character whitelisting
+    custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist= .+-*/0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
+
     # Perform OCR on the thresholded image
-    text = pytesseract.image_to_string(thresh)
-    return text
+    text = pytesseract.image_to_string(thresh,lang="eng", config = custom_config)
+    print(text)
+    return text.strip(' \n\x0c')
+
+def scikit_image(source,image99):
+    # Convert images to grayscale
+    gray_image1 = cv.cvtColor(source, cv.COLOR_BGR2GRAY)
+    gray_image2 = cv.cvtColor(image99, cv.COLOR_BGR2GRAY)
+    cv.imwrite('Results/partialSource.jpg',gray_image1)
+    cv.imwrite('Results/partialimage.jpg',gray_image2)
+
+    # # Compute Structural Similarity Index (SSI)
+    ssi_index, _ = ssim(gray_image1, gray_image2, full=True)
+
+    # Compute Structural Similarity Index (SSI) with emphasis on luminance
+    # ssi_index = ssim(gray_image1, gray_image2, data_range=gray_image2.max() - gray_image2.min())
+
+    print("Structural Similarity Index (SSI):", ssi_index)
+    return ssi_index
+
+def squared_error(source,image99):
+    # Convert images to grayscale
+    gray_image1 = cv.cvtColor(source, cv.COLOR_BGR2GRAY)
+    gray_image2 = cv.cvtColor(image99, cv.COLOR_BGR2GRAY)
+    cv.imwrite('Results/partialSource.jpg',gray_image1)
+    cv.imwrite('Results/partialimage.jpg',gray_image2)
+    # Convert images to grayscale
+
+    # Compute Mean Squared Error (MSE)
+    mse = ((gray_image1 - gray_image2) ** 2).mean()
+
+    print("Mean Squared Error (MSE):", mse)
+    return mse

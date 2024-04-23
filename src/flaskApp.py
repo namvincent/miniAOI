@@ -9,7 +9,7 @@ app = Flask(__name__)
 CORS(app)
 
 @app.route('/')
-async def home():
+def home():
     # result = await async_checking()
     return 'Hello World'
 
@@ -29,11 +29,17 @@ async def takeSample():
     await TakeCoordinates(partNo)
     return 'Finish!'
 
-@app.get('/visualInspection')
+@app.route('/visualInspection')
 async def visualInspection():          
     result = await async_checking()
     return result
 
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0')
-    # app.run(debug=True, host='0.0.0.0',ssl_context=('cert19.pem', 'key19.pem'))
+def main():
+    try:
+        app.run(debug=True, host='0.0.0.0')
+    except KeyboardInterrupt as e:
+        print("out")
+
+# if __name__ == '__main__':
+    # app.run(debug=True, host='0.0.0.0')
+main()

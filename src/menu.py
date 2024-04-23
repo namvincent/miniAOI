@@ -1,7 +1,8 @@
 # This is a sample Python script.
 
 import json 
-
+import pytesseract
+import cv2 as cv2
 import requests
 from ColorDetection import compare
 from SpecifyCheckingArea import select
@@ -12,7 +13,7 @@ import base64
 from Image_Processing import encode_image_to_base64
 from Object.Coordinates import Coordinates
 from Object.Coordinates import serialize_coordinates
-from async_checking import async_checking
+from async_checking import async_checking,load_partial_image,read_text_from_image
 
 file_path = 'coordinate.txt'
 
@@ -49,7 +50,7 @@ def menu(name):
             with open('SampleId.txt', 'r') as file:
                 for line in file:
                     id = int(line.strip())
-            url = f"http://fvn-s-web01.friwo.local:5000/api/VisualIspection/PD/GetSamplePicture?id={id}"
+            url = f"http://10.100.10.83:5000/api/VisualIspection/PD/GetSamplePicture?id={id}"
             response = requests.get(url)
             # Convert Base64 bytes to string (optional, depending on your use case)
 
@@ -86,7 +87,7 @@ def menu(name):
                 topLeft = f'{item[0][0]},{item[0][1]}'
                 bottomRight = f'{item[1][0]},{item[1][1]}'
                 coordinates = Coordinates(0,partNo,"1",str(id),topLeft,bottomRight)            
-                url = "http://fvn-s-web01.friwo.local:5000/api/VisualIspection/QD/InsertCoordinates"
+                url = "http://10.100.10.83:5000/api/VisualIspection/QD/InsertCoordinates"
                 
 
                 data = json.dumps(coordinates, default=serialize_coordinates)
@@ -99,7 +100,7 @@ def menu(name):
                     print("Failed to send data:", response.status_code)
                     print("Failed to send data:", response.request.body)
 
-            url1 = f"http://fvn-s-web01.friwo.local:5000/api/VisualIspection/PD/getCoordinates?partNo={partNo}"
+            url1 = f"http://10.100.10.83:5000/api/VisualIspection/PD/getCoordinates?partNo={partNo}"
             response1 = requests.get(url1)
             # Convert Base64 bytes to string (optional, depending on your use case)
 
@@ -115,7 +116,7 @@ def menu(name):
         else:
             capture_frame(True)
 
-            url = "http://fvn-s-web01.friwo.local:5000/api/VisualIspection/QD/InputSample"
+            url = "http://10.100.10.83:5000/api/VisualIspection/QD/InputSample"
             # url = "https://my-json-server.typicode.com/JasonNguyen1205/GitRepo/sample"
             source_path = 'Sources/source_image.jpg'
             picture = encode_image_to_base64(source_path)
@@ -139,10 +140,11 @@ def menu(name):
 
 async def TakeCoordinates(part_No):
     partNo = part_No
+    checkType = "s"
     with open('SampleId.txt', 'r') as file:
         for line in file:
             id = int(line.strip())
-    url = f"http://fvn-s-web01.friwo.local:5000/api/VisualIspection/PD/GetSamplePicture?id={id}"
+    url = f"http://10.100.10.83:5000/api/VisualIspection/PD/GetSamplePicture?id={id}"
     response = requests.get(url)
             # Convert Base64 bytes to string (optional, depending on your use case)
 
@@ -164,13 +166,13 @@ async def TakeCoordinates(part_No):
 
             # Decode the Base64 string, making sure to remove the "data:image/jpeg;base64," part
     image_data = base64.b64decode(base64str)
-
+    
             # Convert to a PIL image
     image = Image.open(BytesIO(image_data))
 
             # Save the image to a file
     image.save('Sources/source_image.jpg')
-
+    sampleImage = cv2.imread('Sources/source_image.jpg')
     areas = select('Sources/source_image.jpg')
 
             # with open(file_path, 'w') as file:
@@ -179,7 +181,7 @@ async def TakeCoordinates(part_No):
         topLeft = f'{item[0][0]},{item[0][1]}'
         bottomRight = f'{item[1][0]},{item[1][1]}'
         coordinates = Coordinates(0,partNo,"1",str(id),topLeft,bottomRight)            
-        url = "http://fvn-s-web01.friwo.local:5000/api/VisualIspection/QD/InsertCoordinates"
+        url = "http://10.100.10.83:5000/api/VisualIspection/QD/InsertCoordinates"
                 
 
         data = json.dumps(coordinates, default=serialize_coordinates)
@@ -192,7 +194,7 @@ async def TakeCoordinates(part_No):
             print("Failed to send data:", response.status_code)
             print("Failed to send data:", response.request.body)
 
-    url1 = f"http://fvn-s-web01.friwo.local:5000/api/VisualIspection/PD/getCoordinates?partNo={partNo}"
+    url1 = f"http://10.100.10.83:5000/api/VisualIspection/PD/getCoordinates?partNo={partNo}"
     response1 = requests.get(url1)
             # Convert Base64 bytes to string (optional, depending on your use case)
 
@@ -204,12 +206,27 @@ async def TakeCoordinates(part_No):
         for item in result_list1:
             topLeft = item['topLeft']
             bottomRight = item['bottomRight']
-            file.write(f's,{topLeft},{bottomRight}\n')
+            top_left_x: int = int(topLeft.strip().split(",")[0])
+            top_left_y: int = int(topLeft.strip().split(",")[1])
+            bottom_right_x: int = int(bottomRight.strip().split(",")[0])
+            bottom_right_y: int = int(bottomRight.strip().split(",")[1])
+            top_Left_Partial = (top_left_x,top_left_y)
+            bottom_Right_Partial = (bottom_right_x,bottom_right_y)
+            partial_area_image = await load_partial_image(
+                sampleImage, top_Left_Partial, bottom_Right_Partial)
+            # checking_content =  read_text_from_image(partial_area_image)
+            # if checking_content.strip(' \n\x0c') is None or checking_content.strip(' \n\x0c')  =='':
+            checking_content = pytesseract.image_to_string(Image.fromarray(partial_area_image), lang="eng", timeout=10)            
+            if checking_content.strip(' \n\x0c') is None or checking_content.strip(' \n\x0c')  =='':
+                checkType ="c"
+            else:
+                checkType ="s"
+            file.write(f'{checkType},{topLeft},{bottomRight}\n')
 
 async def take_sample():
     await capture_frame(True)
 
-    url = "http://fvn-s-web01.friwo.local:5000/api/VisualIspection/QD/InputSample"
+    url = "http://10.100.10.83:5000/api/VisualIspection/QD/InputSample"
             # url = "https://my-json-server.typicode.com/JasonNguyen1205/GitRepo/sample"
     source_path = 'Sources/source_image.jpg'
     picture = encode_image_to_base64(source_path)
