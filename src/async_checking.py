@@ -8,7 +8,7 @@ import numpy as np
 import pytesseract
 from PIL import Image, ImageFont, ImageDraw
 from spellchecker import SpellChecker
-from capture_image import capture_frame, take_picture, raspi_io
+from capture_image import capture_frame, take_picture
 from Object.VisualResult import serialize_visual_data
 import os
 from skimage.metrics import structural_similarity as ssim
@@ -23,9 +23,10 @@ async def read_out_locations_need_to_be_checked(coordinate_file_path):
             top_left_y: int = int(line.strip().split(",")[2])
             bottom_right_x: int = int(line.strip().split(",")[3])
             bottom_right_y: int = int(line.strip().split(",")[4])
+            angle: int = int(line.strip().split(",")[5])
             top_left = (top_left_x, top_left_y)
             bottom_right = (bottom_right_x, bottom_right_y)
-            areas.append((check_type, [top_left, bottom_right]))
+            areas.append((check_type, [top_left, bottom_right],angle))
     return areas
 
 
@@ -424,7 +425,7 @@ async def calculate_async(area):
     final_result = []
     return_image = image.copy()
     return_source_image = source_image.copy()
-    checking_type, item = area
+    checking_type, item,angle = area
     result = False
     checking_content = ""
     top_left, bottom_right = item
@@ -503,10 +504,10 @@ async def calculate_async(area):
         resized_source_image = cv.resize(return_source_image, (width, height))
         resized_image = cv.resize(return_image, (width, height))
     else:
-        wrong_position = await check_not_in_position(
-            partial_area_image, partial_source_image, item, image
-        )
-
+        # wrong_position = await check_not_in_position(
+        #     partial_area_image, partial_source_image, item, image
+        # )
+        wrong_position = False
         if not wrong_position:
             result = True
             final_color = (0, 255, 0)
@@ -514,7 +515,7 @@ async def calculate_async(area):
             result = False
             final_color = (0, 0, 255)
         # checking_content = pytesseract.image_to_string(Image.fromarray(partial_area_image), lang="eng", timeout=10)
-        checking_content =  read_text_from_image(partial_area_image)
+        checking_content =  read_text_from_image(partial_area_image,angle)
         if checking_content.strip(' \n\x0c') is None or checking_content.strip(' \n\x0c')  =='':
             checking_content = pytesseract.image_to_string(Image.fromarray(partial_area_image), lang="eng", timeout=10)            
         if checking_content.strip(' \n\x0c') is None or checking_content.strip(' \n\x0c')  =='':
@@ -933,29 +934,63 @@ async def delete_files_in_directory(directory):
                 # Print an error message if deletion fails
                 print(f"Error deleting directory: {dir_path}, {e}")
 
-def read_text_from_image(image99):
+def read_text_from_image(image99 , angle):
     # Load the image
     # image99 = cv.imread(path)
-    
+    text = ''
     # Convert the image to grayscale
     # Convert to grayscale
     gray = cv.cvtColor(image99, cv.COLOR_BGR2GRAY)
     cv.imwrite('Results/grayScale.jpg',gray)
-    
-    
+    # Perform OCR on the thresholded image with character whitelisting
+    custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist= .+-*/0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    dictionary_text = read_txt_file(DICTIONARY_FILE)
+    # Split the dictionary text into words
+    dictionary_words = dictionary_text.split()
+    #  Initialize a list to store matched parts
+    matched_parts = []
+    # # Apply adaptive thresholding
+    # _, thresh = cv.threshold(gray, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+    # for angle in range(0,361,45):
+    # Open the image file
+    imageR = Image.open('Results/grayScale.jpg')
+
+    # Rotate the image by 90 degrees counter-clockwise
+    rotated_image = imageR.rotate(angle)
+
+    # Save the rotated image
+    rotated_image.save(f"Rotate/rotated_image_{angle}.jpg")
+
+    img_rotate = cv.imread(f"Rotate/rotated_image_{angle}.jpg")
+    gray = cv.cvtColor(img_rotate, cv.COLOR_BGR2GRAY)
     # Apply adaptive thresholding
     _, thresh = cv.threshold(gray, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+    # Perform OCR on the thresholded image
+    temp_text = pytesseract.image_to_string(Image.fromarray(gray), lang="eng", timeout=10) 
 
+    # if len(temp_text) > len(text):
+    #     text = temp_text.strip(' \n\x0c')
+
+    print(f'{temp_text}')
+        # Split the long string into words
+    long_string_words = temp_text.strip(' \n\x0c').split()      
+    # Iterate through each word in the long string
+    for word in long_string_words:
+        # Check if the word exists in the dictionary text
+        if word in dictionary_words:
+            if word not in matched_parts:
+                # If found, add it to the matched parts list
+                matched_parts.append(word)
     # # Apply Gaussian blur and adaptive thresholding
     # blur = cv.GaussianBlur(gray, (5, 5), 0)
     # thresh = cv.adaptiveThreshold(blur, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 4)
 
-    # Perform OCR on the thresholded image with character whitelisting
-    custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist= .+-*/0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
+   
 
-    # Perform OCR on the thresholded image
-    text = pytesseract.image_to_string(thresh,lang="eng", config = custom_config)
-    print(text)
+    # Join the matched parts to form a string
+    text = ' '.join(matched_parts)
+    
+    print(f'Final: {text}')
     return text.strip(' \n\x0c')
 
 def scikit_image(source,image99):
@@ -987,3 +1022,9 @@ def squared_error(source,image99):
 
     print("Mean Squared Error (MSE):", mse)
     return mse
+
+# Read the content of the TXT file
+def read_txt_file(file_path):
+    with open(file_path, 'r') as file:
+        content = file.read()
+    return content

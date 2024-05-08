@@ -1,11 +1,11 @@
 import subprocess
 import os
 import cv2 as cv
-from capture_image.gpio_controller import raspi_io
+# from capture_image.gpio_controller import raspi_io
 
 async def capture_frame(source):
-    raspi_io.__init__()
-    raspi_io.flash_on()
+    # raspi_io.__init__()
+    # raspi_io.flash_on()
     if source:
         file_name = "Sources/source_image.jpg"        
     else:
@@ -15,7 +15,7 @@ async def capture_frame(source):
         "--timeout",
         "500",
         "--width",
-        "1500",
+        "1920",
         "--height",
         "1000",
         # "--autofocus-mode",
@@ -27,21 +27,27 @@ async def capture_frame(source):
         # "--autofocus-window","0.2,0.2,0.8,0.8",
         # "--shutter",
         # "3000",
-        # "--sharpness",
-        # "15",
+        "--sharp",
+        "5",
         # "--contrast",
         # "1",
-        # "--brightness",
-        # "0.2",
+        "--bright",
+        "0.2",
+        "--vflip",
+        "0",
+        "--hflip",
+        "0",
         # "--hdr","sensor",
         # "--autofocus-on-capture",
         # "1",
+        "-f",
+        "1",
         "-o",
         file_name
     ]
     subprocess.run(ffmpeg_cmd)
-    raspi_io.flash_off()
-    raspi_io.cleanup()
+    # raspi_io.flash_off()
+    # raspi_io.cleanup()
 
 def take_picture_ocr():
     ffmpeg_cmd = [

@@ -13,7 +13,7 @@ import base64
 from Image_Processing import encode_image_to_base64
 from Object.Coordinates import Coordinates
 from Object.Coordinates import serialize_coordinates
-from async_checking import async_checking,load_partial_image,read_text_from_image
+from async_checking import async_checking,load_partial_image,read_txt_file
 
 file_path = 'coordinate.txt'
 
@@ -166,11 +166,11 @@ async def TakeCoordinates(part_No):
 
             # Decode the Base64 string, making sure to remove the "data:image/jpeg;base64," part
     image_data = base64.b64decode(base64str)
-    
-            # Convert to a PIL image
+    #Vincent test
+    #         # Convert to a PIL image
     image = Image.open(BytesIO(image_data))
 
-            # Save the image to a file
+    #         # Save the image to a file
     image.save('Sources/source_image.jpg')
     sampleImage = cv2.imread('Sources/source_image.jpg')
     areas = select('Sources/source_image.jpg')
@@ -193,7 +193,7 @@ async def TakeCoordinates(part_No):
         else:
             print("Failed to send data:", response.status_code)
             print("Failed to send data:", response.request.body)
-
+    #Vincent End
     url1 = f"http://10.100.10.83:5000/api/VisualIspection/PD/getCoordinates?partNo={partNo}"
     response1 = requests.get(url1)
             # Convert Base64 bytes to string (optional, depending on your use case)
@@ -214,14 +214,16 @@ async def TakeCoordinates(part_No):
             bottom_Right_Partial = (bottom_right_x,bottom_right_y)
             partial_area_image = await load_partial_image(
                 sampleImage, top_Left_Partial, bottom_Right_Partial)
-            # checking_content =  read_text_from_image(partial_area_image)
+            angle =  read_text_from_image(partial_area_image)
+            print(f"Angle: {angle}")
             # if checking_content.strip(' \n\x0c') is None or checking_content.strip(' \n\x0c')  =='':
-            checking_content = pytesseract.image_to_string(Image.fromarray(partial_area_image), lang="eng", timeout=10)            
-            if checking_content.strip(' \n\x0c') is None or checking_content.strip(' \n\x0c')  =='':
+            # checking_content = pytesseract.image_to_string(Image.fromarray(partial_area_image), lang="eng", timeout=10)            
+            # if angle.strip(' \n\x0c') is None or angle.strip(' \n\x0c')  =='':
+            if angle == -1:
                 checkType ="c"
             else:
                 checkType ="s"
-            file.write(f'{checkType},{topLeft},{bottomRight}\n')
+            file.write(f'{checkType},{topLeft},{bottomRight},{angle}\n')
 
 async def take_sample():
     await capture_frame(True)
@@ -257,3 +259,68 @@ async def take_sample():
 #     #main(2)
 #     main(0)
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
+DICTIONARY_FILE = "dictionary.txt"
+OCR_FILE = "ocr.txt"
+def read_text_from_image(image99):
+    angle_final = -1
+    # Load the image
+    # image99 = cv.imread(path)
+    text = ''
+    # Convert the image to grayscale
+    # Convert to grayscale
+    gray = cv2.cvtColor(image99, cv2.COLOR_BGR2GRAY)
+    cv2.imwrite('Results/grayScale.jpg',gray)
+    # Perform OCR on the thresholded image with character whitelisting
+    custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist= .+-*/0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    dictionary_text = read_txt_file(DICTIONARY_FILE)
+    sample_text = read_txt_file(OCR_FILE)
+    # Split the dictionary text into words
+    dictionary_words = dictionary_text.split()
+    sample_words = sample_text.split("\n")
+    #  Initialize a list to store matched parts
+    matched_parts = []
+    # # Apply adaptive thresholding
+    # _, thresh = cv.threshold(gray, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+    for angle in range(0,361,45):
+        # Open the image file
+        imageR = Image.open('Results/grayScale.jpg')
+
+        # Rotate the image by 90 degrees counter-clockwise
+        rotated_image = imageR.rotate(angle)
+
+        # Save the rotated image
+        rotated_image.save(f"Rotate/rotated_image_{angle}.jpg")
+
+        img_rotate = cv2.imread(f"Rotate/rotated_image_{angle}.jpg")
+        gray = cv2.cvtColor(img_rotate, cv2.COLOR_BGR2GRAY)
+        # Apply adaptive thresholding
+        _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        # Perform OCR on the thresholded image
+        temp_text = pytesseract.image_to_string(Image.fromarray(gray), lang="eng", timeout=10) 
+
+        # if len(temp_text) > len(text):
+        #     text = temp_text.strip(' \n\x0c')
+
+        print(f'{temp_text}')
+         # Split the long string into words
+        long_string_words = temp_text.strip(' \n\x0c').split()      
+        # Iterate through each word in the long string
+        for word in long_string_words:
+            # Check if the word exists in the dictionary text
+            if word in dictionary_words:
+                if word not in matched_parts:
+                    # If found, add it to the matched parts list
+                    matched_parts.append(word)
+            text = ' '.join(matched_parts)
+            if text in sample_words:
+                angle_final = angle
+                break
+        if angle_final > -1:
+            break
+    # # Apply Gaussian blur and adaptive thresholding
+    # blur = cv.GaussianBlur(gray, (5, 5), 0)
+    # thresh = cv.adaptiveThreshold(blur, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 4) 
+
+    
+    print(f'Final: {text}')
+    return angle_final
