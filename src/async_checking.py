@@ -2,12 +2,16 @@ import asyncio
 import base64
 import json
 import random
+import subprocess
 import cv2 as cv
 import numpy as np
 import pytesseract
 from PIL import Image, ImageFont, ImageDraw
 from spellchecker import SpellChecker
 from capture_image import capture_frame, take_picture
+from Object.VisualResult import serialize_visual_data
+import os
+from skimage.metrics import structural_similarity as ssim
 
 
 async def read_out_locations_need_to_be_checked(coordinate_file_path):
@@ -19,9 +23,10 @@ async def read_out_locations_need_to_be_checked(coordinate_file_path):
             top_left_y: int = int(line.strip().split(",")[2])
             bottom_right_x: int = int(line.strip().split(",")[3])
             bottom_right_y: int = int(line.strip().split(",")[4])
+            angle: int = int(line.strip().split(",")[5])
             top_left = (top_left_x, top_left_y)
             bottom_right = (bottom_right_x, bottom_right_y)
-            areas.append((check_type, [top_left, bottom_right]))
+            areas.append((check_type, [top_left, bottom_right],angle))
     return areas
 
 
@@ -77,7 +82,7 @@ async def tranform_image(image_path, image=None, alpha=1.5, beta=-50.0, rotate=0
         resized = cv.resize(
             thresh,
             (int(adjusted.shape[1] * zoom), int(thresh.shape[0] * zoom)),
-            interpolation=cv.INTER_CUBIC,
+            interpolation=cv.INTER_LINEAR_EXACT,
         )
 
     # Gaussian Blur
@@ -89,19 +94,19 @@ async def tranform_image(image_path, image=None, alpha=1.5, beta=-50.0, rotate=0
     # sharpened = sharpen_image(median_blur)
 
     # Display the original and processed images
-    # cv.imshow('Original Image', adjusted)
+    # # cv.imshow('Original Image', adjusted)
     # cv.waitKey(0)
-    # cv.imshow('Grayscale Image', gray_image)
+    # # cv.imshow('Grayscale Image', gray_image)
     # cv.waitKey(0)
-    # cv.imshow('Edge Detection', sharpened)
+    # # cv.imshow('Edge Detection', sharpened)
     # cv.waitKey(0)
-    # cv.imshow('Threshold', thresh)
+    # # cv.imshow('Threshold', thresh)
     # cv.waitKey(0)
-    # cv.imshow('Resized', resized)
+    # # cv.imshow('Resized', resized)
     # cv.waitKey(0)
-    # cv.imshow('Gaussian Blur', gaussian_blur)
+    # # cv.imshow('Gaussian Blur', gaussian_blur)
     # cv.waitKey(0)
-    # cv.imshow('Median Blur', median_blur)
+    # # cv.imshow('Median Blur', median_blur)
 
     # Wait for a key press and then close all windows
     # cv.destroyAllWindows()
@@ -153,7 +158,7 @@ async def insert_image_into_white_base(image1, position, width=400, height=400):
     return base_image
 
 
-IMAGE_PATH = "captured_image_p.jpg"
+IMAGE_PATH = "captured_image.jpg"
 SOURCE_PATH = "Sources/source_image.jpg"
 COORDINATE_FILE_PATH = "coordinate.txt"
 
@@ -182,47 +187,47 @@ async def aoi(area):
     return None
 
 
-async def process_image(image):
-    ocr_result_final = []
-    ocr_result = []
-    longest = ""
+# async def process_image(image):
+#     ocr_result_final = []
+#     ocr_result = []
+#     longest = ""
 
-    img_resized = await preprocess_image(image)
+#     img_resized = await preprocess_image(image)
 
-    thresh = 30
-    while thresh < 180:
-        ocr_result = []
-        thresh += 20
-        img_adjust = await adjust_image(img_resized, thresh)
-        text = await extract_text_from_image(img_adjust)
-        if text is None or text == "" or longest == "" or longest is None:
-            continue
-        if len(text) > len(longest):
-            longest = text
-        idx = False
-        if text is not None:
-            ocr_result.append(text)
-            try:
-                idx = content_text.find(text)
-            except Exception as e:
-                print(e)
+#     thresh = 30
+#     while thresh < 180:
+#         ocr_result = []
+#         thresh += 20
+#         img_adjust = await adjust_image(img_resized, thresh)
+#         #text = await extract_text_from_image(img_adjust)
+#         if text is None or text == "" or longest == "" or longest is None:
+#             continue
+#         if len(text) > len(longest):
+#             longest = text
+#         idx = False
+#         if text is not None:
+#             ocr_result.append(text)
+#             try:
+#                 idx = content_text.find(text)
+#             except Exception as e:
+#                 print(e)
 
-            if idx > 0:
-                print(f"OK: {text}")
-                ocr = await find_best_ocr_result(ocr_result)
-                await ocr_result_final.append(ocr)
-                break
+#             if idx > 0:
+#                 print(f"OK: {text}")
+#                 ocr = await find_best_ocr_result(ocr_result)
+#                 await ocr_result_final.append(ocr)
+#                 break
 
-            if ocr_result:
-                longest = spell.correction(longest)
-                ocr = longest
-                ocr_result.append(longest)
+#             if ocr_result:
+#                 longest = spell.correction(longest)
+#                 ocr = longest
+#                 ocr_result.append(longest)
 
-    if ocr_result_final:
-        ocr = spell.correction(longest)
-        return ocr
+#     if ocr_result_final:
+#         ocr = spell.correction(longest)
+#         return ocr
 
-    return None
+#     return None
 
 
 async def preprocess_image(image):
@@ -239,7 +244,7 @@ async def preprocess_image(image):
         ratio = 300 / h
         w = int(w * ratio)
         h = int(h * ratio)
-    img_resized = cv.resize(img_ocr, (w, h), interpolation=cv.INTER_CUBIC)
+    img_resized = cv.resize(img_ocr, (w, h), interpolation=cv.INTER_LINEAR_EXACT)
     img_resized = await insert_image_into_white_base(
         img_resized, (int(150 - w / 2), int(150 - h / 2)), 300, 300
     )
@@ -262,24 +267,28 @@ async def adjust_image(image, thresh):
 
 async def extract_text_from_image(image):
     global count
+    img = None
+    markup1 = None
+    markup2 = None
+    markup3 = None
     img = Image.fromarray(image)
-    rotated = img.rotate(-90, expand=True)
-    rotated.save(f"ocr{count}.jpg")
     count += 1
-    text = pytesseract.image_to_string(rotated)
-
+    #text = pytesseract.image_to_string(img)
+    img.save(f"ocr{count}.jpg")
     print(text)
     if text != "" and text is not None:
         corrected = spell.correction(text)
         print(corrected)
     else:
-        markup1 = await preprocess_image(rotated)
-        markup2 = await adjust_image(markup1, 120)
+        #markup1 = await preprocess_image(img)
+        markup2 = await adjust_image(img, 90)
         markup3 = await correct_color(markup2)
-        # cv.imshow(f"ocr{count}.jpg", markup3)
+        # # cv.imshow(f"ocr{count}.jpg", markup3)
         count += 1
-        text = pytesseract.image_to_string(markup3)
+        text_img = Image.fromarray(markup3)
+        text = pytesseract.image_to_string(text_img)
         corrected = spell.correction(text)
+        text_img.save(f"ocr{count}.jpg")
         print(corrected)
 
     if corrected is not None:
@@ -296,8 +305,8 @@ async def find_best_ocr_result(ocr_result):
 async def add_unicode_text_to_image(
     image_cv, text, position, font_path, font_size, text_color=None, bg_color=(0, 0, 0)
 ):
-    if text_color is None:
-        text_color = random_color()
+    # if text_color is None:
+    #     text_color = random_color()
     """
     Adds Unicode text with a background to an image at the specified position.
 
@@ -338,7 +347,7 @@ DICTIONARY_FILE = "dictionary.txt"
 
 def add_special_words_to_dictionary():
     global spell
-    spell = SpellChecker(language=None, case_sensitive=True)
+    spell = SpellChecker(language=None, case_sensitive=False)
     spell.word_frequency.load_text_file(DICTIONARY_FILE, encoding="utf-8")
     return spell
 
@@ -359,11 +368,13 @@ async def compare_color_and_save_mask(image, source, roi, threshold=90):
     top_left, bottom_right = roi
     region_width = bottom_right[0] - top_left[0]
     region_height = bottom_right[1] - top_left[1]
-
+    if source is None or image is None:
+        return False,roi
     # template_resized = cv.resize(source, (region_width, region_height))
     try:
         template_hsv = cv.cvtColor(source, cv.COLOR_BGR2HSV)
     except Exception as e:
+        return False,roi
         template_hsv = cv.cvtColor(
             cv.cvtColor(source, cv.COLOR_GRAY2BGR), cv.COLOR_BGR2HSV
         )
@@ -402,7 +413,7 @@ async def compare_color_and_save_mask(image, source, roi, threshold=90):
     mask_path = f"Results/color_{roi}.jpg"
 
     # Save the mask
-    # cv.imshow(mask_path, diff)
+    # # cv.imshow(mask_path, diff)
 
     return color_difference > threshold, roi
 
@@ -412,8 +423,9 @@ async def calculate_async(area):
     global final_result_image
     final_result_image = final_result_image
     final_result = []
-    final_data = []
-    checking_type, item = area
+    return_image = image.copy()
+    return_source_image = source_image.copy()
+    checking_type, item,angle = area
     result = False
     checking_content = ""
     top_left, bottom_right = item
@@ -422,7 +434,14 @@ async def calculate_async(area):
     # source_bottom_right_x: int = int(item.strip().split(',')[2]+5)
     # source_bottom_right_y: int = int(item.strip().split(',')[3]+5)
 
-    offset = 2
+    # Set the desired percentage of resizing
+    scale_percent = 70  # Adjust this value to the desired percentage
+
+    # Calculate the new dimensions based on the percentage
+    width = int(source_image.shape[1] * scale_percent / 100)
+    height = int(source_image.shape[0] * scale_percent / 100)
+
+    offset = 0
     source_top_left = (max(0, top_left[0] - offset), max(0, top_left[1] - offset))
     source_bottom_right = (
         min(image.shape[1], bottom_right[0] + offset),
@@ -430,24 +449,24 @@ async def calculate_async(area):
     )
     # hsv_partial_image = load_partial_image(hsv_image, top_left, bottom_right)
     # hsv_partial_path = 'Sources/hsv_partial_image.jpg'
-    # cv.imshow(hsv_partial_path, hsv_partial_image)
+    # # cv.imshow(hsv_partial_path, hsv_partial_image)
     partial_image = await load_partial_image(image, top_left, bottom_right)
     partial_path = "Sources/partial_image.jpg"
     # if partial_image is not None:
-    # cv.imshow(partial_path, partial_image)
-    # cv.imshow(partial_image)
+    # # cv.imshow(partial_path, partial_image)
+    # # cv.imshow(partial_image)
     partial_source_image = await load_partial_image(
         source_image, top_left, bottom_right
     )
     partial_source_path = "Sources/partial_source_image.jpg"
-    # cv.imshow(partial_source_path, partial_source_image)
-    # cv.imshow(partial_source_image)
+    # # cv.imshow(partial_source_path, partial_source_image)
+    # # cv.imshow(partial_source_image)
     partial_area_image = await load_partial_image(
         image, source_top_left, source_bottom_right
     )
     partial_area_path = "Sources/partial_area_image.jpg"
-    # cv.imshow(partial_area_path, partial_area_image)
-    # cv.imshow(partial_area_image)
+    # # cv.imshow(partial_area_path, partial_area_image)
+    # # cv.imshow(partial_area_image)
 
     # partial_area_image = cv.GaussianBlur(partial_area_image, (5, 5), 0)
     # partial_source_image = cv.GaussianBlur(partial_source_image, (5, 5), 0)
@@ -455,60 +474,89 @@ async def calculate_async(area):
     # image = cv.GaussianBlur(image, (5, 5), 0)
     if checking_type == "c":
         wrong_color, roi = await compare_color_and_save_mask(
-            image, partial_source_image, item, 90
+            image, partial_source_image, item, 70
         )
         top_left, bottom_right = roi
-
+        scikit_detect = scikit_image(partial_source_image,partial_area_image)
+        squared_detect = squared_error(partial_source_image,partial_area_image)
         # wrong_color = is_similar(image, source_image)
         # wrong_color, color_mask = check_wrong_color(partial_image, red_color_ranges)
-        print(f"Wrong Color: {wrong_color}")
-        if not wrong_color:
+
+        # print(f"Wrong Color: {wrong_color}")
+        # if not wrong_color:
+        #     result = True
+        #     final_color = (0, 255, 0)
+        # else:
+        #     result = False
+        #     final_color = (0, 0, 255)
+        if squared_detect < 85:
             result = True
             final_color = (0, 255, 0)
         else:
             result = False
-            final_color = (0, 0, 255)
+            final_color = (0, 0, 255)        
         final_result.append(result)
-        cv.rectangle(partial_area_image, (0, 0), (5, 5), final_color, -1)
-        cv.rectangle(final_result_image, top_left, bottom_right, final_color, 1)
+        
+        cv.rectangle(return_image, top_left, bottom_right, final_color, 3)
+        cv.rectangle(final_result_image, top_left, bottom_right, final_color, 3)
+        cv.rectangle(return_source_image, top_left, bottom_right, final_color, 3)
+        # Resize the image
+        resized_source_image = cv.resize(return_source_image, (width, height))
+        resized_image = cv.resize(return_image, (width, height))
     else:
-        wrong_position = await check_not_in_position(
-            partial_area_image, partial_source_image, item, image
-        )
+        # wrong_position = await check_not_in_position(
+        #     partial_area_image, partial_source_image, item, image
+        # )
+        wrong_position = False
         if not wrong_position:
             result = True
             final_color = (0, 255, 0)
         else:
             result = False
             final_color = (0, 0, 255)
+        # checking_content = pytesseract.image_to_string(Image.fromarray(partial_area_image), lang="eng", timeout=10)
+        checking_content =  read_text_from_image(partial_area_image,angle)
+        if checking_content.strip(' \n\x0c') is None or checking_content.strip(' \n\x0c')  =='':
+            checking_content = pytesseract.image_to_string(Image.fromarray(partial_area_image), lang="eng", timeout=10)            
+        if checking_content.strip(' \n\x0c') is None or checking_content.strip(' \n\x0c')  =='':
+            checking_content = 'OCR not success'
+            result = False
+            final_color = (0, 0, 255)
         final_result.append(result)
-        cv.rectangle(partial_area_image, (0, 0), (5, 5), final_color, -1)
-        cv.rectangle(final_result_image, top_left, bottom_right, final_color, 1)
-        checking_content = await extract_text_from_image(partial_image)
-
+        cv.rectangle(return_image, top_left, bottom_right, final_color, 3)
+        cv.rectangle(final_result_image, top_left, bottom_right, final_color, 3)
+        cv.rectangle(return_source_image, top_left, bottom_right, final_color, 3)
+        resized_source_image = cv.resize(return_source_image, (width, height))
+        resized_image = cv.resize(return_image, (width, height))
+      
         final_result_image = await add_unicode_text_to_image(
             final_result_image,
             str(checking_content),
             position=bottom_right,
             font_path="Fonts/TitilliumWeb-Italic.ttf",
-            font_size=30,
+            font_size=10,
             text_color=(0, 0, 255),
         )
-    _, encoded_image = cv.imencode(".jpg", partial_area_image)
+    _, encoded_image = cv.imencode(".jpg", resized_image)
+    _, sample_encoded_image = cv.imencode(".jpg", resized_source_image)
     image_bytes = encoded_image.tobytes()
+    sample_image_bytes = sample_encoded_image.tobytes()
+   
+
     tmp = {
         "topLeft": f"{item[0][0]},{item[0][1]}",
         "bottomRight": f"{item[1][0]},{item[1][1]}",
         "checkType": checking_type,
         "result": str(result),
-        # "finalResultImage": base64.b64encode(image_bytes).decode(),
+        "finalResultImage": base64.b64encode(image_bytes).decode(),
+        "sampleImage" :base64.b64encode(sample_image_bytes).decode(),
         # 'finalResultImage': '',
-        "checkingContent": checking_content,
+        "checkingContent": checking_content.strip(' \n\x0c'),
     }
     final_data.append(tmp)
-    # cv.imshow(f"Results/{item}-result.jpg", partial_area_image)
-    # cv.imshow(partial_area_image)
-
+    cv.imwrite(f"Results/{checking_type}-{item}-result.jpg", partial_area_image)
+    # # cv.imshow(partial_area_image)
+    
     if False in final_result:
         print("Defected")
         visual_inspection_result = "FAIL"
@@ -519,34 +567,40 @@ async def calculate_async(area):
         visual_inspection_result = "PASS"
         visual_inspection_result_color = (0, 255, 0)
 
-    cv.imshow(
-        "final_result_image",
-        final_result_image,
-    )
+    # cv.imshow(
+    #     "final_result_image",
+    #     final_result_image,
+    # )
 
-    # cv.imshow(final_result_image)
-    return final_data
+    # # cv.imshow(final_result_image)
+    
+    return tmp
 
-
+#global checking_results
 async def check_not_in_position(image, template, area, original_image):
     original_top_left, original_bottom_right = area
     captured_image = original_image[
         original_top_left[1] : original_bottom_right[1],
         original_top_left[0] : original_bottom_right[0],
     ]
+  
     target_image_gray = cv.cvtColor(captured_image, cv.COLOR_BGR2GRAY)
     image_gray = await convert_to_gray(image)
     template_gray = await convert_to_gray(template)
     w, h = target_image_gray.shape[::-1]
     methods = [
-        cv.TM_CCOEFF_NORMED,
-        cv.TM_CCORR_NORMED,
-        cv.TM_SQDIFF_NORMED,
-        cv.TM_CCORR,
-        cv.TM_CCOEFF,
+        # cv.TM_CCOEFF_NORMED,
+        # cv.TM_CCORR_NORMED,
+        # cv.TM_SQDIFF_NORMED,
+        # cv.TM_CCORR,
+        # cv.TM_CCOEFF,
         cv.TM_SQDIFF,
     ]
+    checking_results = [50]
+    count = 0
+    wrong_color = True
     for method in methods:
+        
         res = cv.matchTemplate(image_gray, template_gray, method)
         _, max_val, max_loc, min_loc = cv.minMaxLoc(res)
         top_left = min_loc if method in [cv.TM_SQDIFF, cv.TM_SQDIFF_NORMED] else max_loc
@@ -560,21 +614,62 @@ async def check_not_in_position(image, template, area, original_image):
                 template, outer_top_left, bottom_right
             )
             similar_area = await get_similar_area(
-                captured_image, outer_top_left, bottom_right
+                captured_image, top_left, bottom_right
             )
-            edge_difference, edges = await compare_features(
-                template_crop, similar_area, detect_edges
+            edge_difference, origin_edges, edges, can_check = await compare_features(
+                template_crop, image_gray, detect_edges
             )
-            corner_difference, corners = await compare_features(
-                template_crop, similar_area, detect_corners
+            corner_difference, origin_corners, corners, can_check = await compare_features(
+                template_crop, image, detect_corners
             )
             wrong_color, roi = await get_color(
                 edge_difference, corner_difference, similar_area, template_crop
             )
-            if edge_difference < 5 and corner_difference < 10 and not wrong_color:
-                return False
+          
+            # print(corners)
+            
+             
+            cv.imwrite(f"Results/shapes/origin/CORNERS-{method}{area}.jpg",origin_corners)
+            cv.imwrite(f"Results/shapes/origin/EDGES-{method}{area}.jpg",origin_edges) 
+            cv.imwrite(f"Results/shapes/CORNERS-{method}{area}.jpg",corners)
+            cv.imwrite(f"Results/shapes/EDGES-{method}{area}.jpg",edges)
 
-    return True
+
+
+            if edge_difference > 0.75:
+                cv.imwrite(f"Results/PASS-{method}{area}.jpg",image)
+                cv.imwrite(f"Results/PASS-{template}{area}.jpg",template)
+                checking_results[count] = False
+                count = count + 1
+                # print(pt)
+                print(edge_difference)
+                print(corner_difference)
+                # print(wrong_color)
+                return False
+               
+        # if zip(*loc[::-1]) is None:
+            
+        #     checking_results[count] = True
+        #     count = count + 1
+        #     return True
+    # print(pt)
+    print(edge_difference)
+    print(corner_difference)
+    print(f'wrong color {wrong_color}')
+    # print(wrong_color)
+    cv.imwrite(f"Results/FAIL-{method}{area}.jpg",image)
+    cv.imwrite(f"Results/FAIL-{template}{area}.jpg",template)
+    return True           
+           
+      
+    #if True in checking_results:          
+    
+    #else:
+    # cv.imwrite(f"Results/FAIL-{method}{area}.jpg",image)
+    # cv.imwrite(f"Results/FAIL-{template}{area}.jpg",template)
+    #    return False
+        
+   
 
 
 async def convert_to_gray(image):
@@ -607,7 +702,7 @@ async def get_similar_area(captured_image, outer_top_left, bottom_right):
 
 async def get_color(edge_difference, corner_difference, similar_area, template_crop):
     wrong_color, roi = await compare_color_and_save_mask(
-        similar_area, template_crop, None, 90
+        similar_area, template_crop, None, 60
     )
     return wrong_color, roi
     # if edge_difference < 5 and corner_difference < 10:
@@ -617,18 +712,25 @@ async def get_color(edge_difference, corner_difference, similar_area, template_c
 
 
 async def detect_edges(image):
-    gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
-    blurred = cv.GaussianBlur(gray, (5, 5), 0)
-    edges = cv.Canny(blurred, 50, 150)
+    try:
+        gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+    except:
+        gray = image
+    blurred = cv.GaussianBlur(gray, (5, 5), 0.1)
+    edges = cv.Canny(blurred,10, 180)
     return edges
 
 
 async def detect_corners(image):
-    gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
-    good_corners = cv.goodFeaturesToTrack(gray, 200, 0.01, 5)
-    good_corners = np.intp(good_corners)
-    corners = cv.cornerHarris(gray, 2, 3, 0.04)
-    corners = cv.dilate(corners, None)
+    try:
+        gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+        good_corners = cv.goodFeaturesToTrack(gray, 80, 0.01, 200)
+        good_corners = np.intp(good_corners)
+        corners = cv.cornerHarris(gray, 2, 3, 0.04)
+        corners = cv.dilate(corners, None)
+    except:
+        good_corners = 0
+        corners = 0
     return good_corners, corners
 
 
@@ -645,27 +747,45 @@ async def compare_features(image1, image2, feature_detector):
     tuple: A tuple containing the difference in feature counts and the modified image.
 
     """
-    if feature_detector == detect_edges:
-        # Create images to visualize the edges and corners
-        features1 = await feature_detector(image1)
-        features2 = await feature_detector(image2)
+    try:
+        if feature_detector == detect_edges:
+            # Create images to visualize the edges and corners
+            f1 = cv.Canny(image1, 100, 200)
+            f2 = cv.Canny(image2, 100, 200)
+            if len(f1) > len(f2):
+                difference = (len(f2)/len(f1))
+                # print(f"f1: {f1}\n")
+                # print(f"f2: {f2}\n")
+            else:
+                difference = (len(f1)/len(f2))
+                # print(f"f1: {f1}\n")
+                # print(f"f2: {f2}\n")
+            if len(f2) == 0:
+                difference = 1000000
+        else:
+          
+            f1, corner1 = await detect_corners(image1)
+            f2, corner2 = await detect_corners(image2)
+            try:
+                difference = abs(len(f1)-len(f2))
+            except:
+                difference = f1 - f2
+            # f1 = cv.goodFeaturesToTrack(image1, 200, 0.01, 5)
+            # f1 = np.intp(f1)
+            # f2 = cv.goodFeaturesToTrack(image2, 200, 0.01, 5)
+            # f2 = np.intp(f2)
+            # difference = abs(f1-f2)
+            f2 = corner2
+            # Here you can add your logic to compare the features
+            # For simplicity, just comparing the count of features
+            if (corner2 == 0 and corner1 > 0):
+                difference = 1000000
+    except Exception as e:
+        print(e)
         image = image2.copy()
-        image[features2 > 0.01 * features2.max()] = [0, 0, 0]
-    else:
-        features1, corners1 = await feature_detector(image1)
-        features2, corners2 = await feature_detector(image2)
-        # Create images to visualize the edges and corners
-        image = image2.copy()
-        image[corners2 > 0.01 * corners2.max()] = [0, 0, 0]
-    # Here you can add your logic to compare the features
-    # For simplicity, just comparing the count of features
-    if len(features1) == 0:
-        difference = 555
-    else:
-        total_f1 = len(features1)
-        difference = abs(total_f1 - len(features2))
-
-    return difference, image
+        difference = 1000000
+        return difference,image1, image, 0
+    return difference, f1, f2, 1
 
 
 async def find_best_ocr_result(ocr_results):
@@ -724,42 +844,187 @@ spell = None
 image = None  # Assign a default value to image
 content_text = None
 contents = None
+#subprocess.run("python3 ~/test_joint.py")
+#take_picture("captured_image.jpg")
 
-# take_picture("captured_image.jpg")
-source_image = cv.imread(SOURCE_PATH)
-image = cv.imread(IMAGE_PATH)
-final_result_image = image.copy()
-final_result = []
-final_data = []
-spell = add_special_words_to_dictionary()
-contents = []
-with open("ocr.txt") as file:
-    content_text = file.read()
-    for i in content_text.splitlines():
-        if i is not None and i != "":
-            spell.word_frequency.add(i)
-            contents.append(i)
-            print(contents)
+# capture_frame(False)
+# source_image = cv.imread(SOURCE_PATH)
+# image = cv.imread(IMAGE_PATH)
+# final_result_image = image.copy()
+# final_result = []
+# final_data = []
+# spell = add_special_words_to_dictionary()
+# contents = []
+# with open("ocr.txt") as file:
+#     content_text = file.read()
+#     for i in content_text.strip():
+#         if i is not None:
+#             spell.word_frequency.add(i)
 
 
 async def process_visual():
-    cv.namedWindow("Main Window")
-    cv.imshow("Main Windows", image)
-
+    final_data = []
     checking_areas = await read_out_locations_need_to_be_checked(COORDINATE_FILE_PATH)
-    # tasks = [aoi(area) for area in filter(lambda x: x[0] == "s", checking_areas)]
+    #tasks = [aoi(area) for area in filter(lambda x: x[0] == "dc", checking_areas)]
 
-    # ocr_array = asyncio.gather(*tasks)
-    main_tasks = (calculate_async(area) for area in checking_areas)
+    #ocr_array = asyncio.gather(*tasks)
+    main_tasks = [calculate_async(area) for area in checking_areas]
+ 
     finish = await asyncio.gather(*main_tasks)
     # finish = await asyncio.gather(result)
-    with open("ocr_result.txt", "w") as File:
-        for item in finish:
-            if item is not None:
-                File.write(str(item) + "\n")
+    # with open("ocr_result.txt", "w") as File:
+    #     for item in finish:
+    #         if item is not None:
+    #             File.write(str(item) + "\n")
+    return finish
 
+# asyncio.run(process_visual())
+# cv.imwrite("Results/result.jpg", final_result_image)
 
-asyncio.run(process_visual())
-cv.waitKey(0)
-cv.imwrite("Results/result.jpg", final_result_image)
-cv.destroyAllWindows()
+async def async_checking():
+    
+    global image,source_image
+    global final_result_image
+    await delete_files_in_directory("Results")
+    await capture_frame(False)
+    source_image = cv.imread(SOURCE_PATH)
+    image = cv.imread(IMAGE_PATH)
+    final_result_image = image.copy()
+    final_result = []
+    final_data = []
+    spell = add_special_words_to_dictionary()
+    contents = []
+    with open("ocr.txt") as file:
+        content_text = file.read()
+        for i in content_text.strip():
+            if i is not None:
+                spell.word_frequency.add(i)    
+    final_data_list = await process_visual()
+    visual_data_json = json.dumps(final_data_list)
+    cv.imwrite("Results/result.jpg", final_result_image)
+    image = Image.open('Results/result.jpg')
+
+    # Use Tesseract to do OCR on the image
+    # text = pytesseract.image_to_string(image, lang='eng')
+    # print(text)
+    return visual_data_json
+
+async def delete_files_in_directory(directory):
+     # Traverse the directory recursively
+    for root, dirs, files in os.walk(directory):
+        # Iterate through all files in the current directory
+        for file in files:
+            file_path = os.path.join(root, file)
+            try:
+                # Attempt to remove the file
+                os.remove(file_path)
+                print(f"Deleted file: {file_path}")
+            except Exception as e:
+                # Print an error message if deletion fails
+                print(f"Error deleting file: {file_path}, {e}")
+
+        # Iterate through all subdirectories in the current directory
+        for dir in dirs:
+            dir_path = os.path.join(root, dir)
+            try:
+                # Attempt to remove the directory
+                os.rmdir(dir_path)
+                print(f"Deleted directory: {dir_path}")
+            except Exception as e:
+                # Print an error message if deletion fails
+                print(f"Error deleting directory: {dir_path}, {e}")
+
+def read_text_from_image(image99 , angle):
+    # Load the image
+    # image99 = cv.imread(path)
+    text = ''
+    # Convert the image to grayscale
+    # Convert to grayscale
+    gray = cv.cvtColor(image99, cv.COLOR_BGR2GRAY)
+    cv.imwrite('Results/grayScale.jpg',gray)
+    # Perform OCR on the thresholded image with character whitelisting
+    custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist= .+-*/0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    dictionary_text = read_txt_file(DICTIONARY_FILE)
+    # Split the dictionary text into words
+    dictionary_words = dictionary_text.split()
+    #  Initialize a list to store matched parts
+    matched_parts = []
+    # # Apply adaptive thresholding
+    # _, thresh = cv.threshold(gray, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+    # for angle in range(0,361,45):
+    # Open the image file
+    imageR = Image.open('Results/grayScale.jpg')
+
+    # Rotate the image by 90 degrees counter-clockwise
+    rotated_image = imageR.rotate(angle)
+
+    # Save the rotated image
+    rotated_image.save(f"Rotate/rotated_image_{angle}.jpg")
+
+    img_rotate = cv.imread(f"Rotate/rotated_image_{angle}.jpg")
+    gray = cv.cvtColor(img_rotate, cv.COLOR_BGR2GRAY)
+    # Apply adaptive thresholding
+    _, thresh = cv.threshold(gray, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+    # Perform OCR on the thresholded image
+    temp_text = pytesseract.image_to_string(Image.fromarray(gray), lang="eng", timeout=10) 
+
+    # if len(temp_text) > len(text):
+    #     text = temp_text.strip(' \n\x0c')
+
+    print(f'{temp_text}')
+        # Split the long string into words
+    long_string_words = temp_text.strip(' \n\x0c').split()      
+    # Iterate through each word in the long string
+    for word in long_string_words:
+        # Check if the word exists in the dictionary text
+        if word in dictionary_words:
+            if word not in matched_parts:
+                # If found, add it to the matched parts list
+                matched_parts.append(word)
+    # # Apply Gaussian blur and adaptive thresholding
+    # blur = cv.GaussianBlur(gray, (5, 5), 0)
+    # thresh = cv.adaptiveThreshold(blur, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 4)
+
+   
+
+    # Join the matched parts to form a string
+    text = ' '.join(matched_parts)
+    
+    print(f'Final: {text}')
+    return text.strip(' \n\x0c')
+
+def scikit_image(source,image99):
+    # Convert images to grayscale
+    gray_image1 = cv.cvtColor(source, cv.COLOR_BGR2GRAY)
+    gray_image2 = cv.cvtColor(image99, cv.COLOR_BGR2GRAY)
+    cv.imwrite('Results/partialSource.jpg',gray_image1)
+    cv.imwrite('Results/partialimage.jpg',gray_image2)
+
+    # # Compute Structural Similarity Index (SSI)
+    ssi_index, _ = ssim(gray_image1, gray_image2, full=True)
+
+    # Compute Structural Similarity Index (SSI) with emphasis on luminance
+    # ssi_index = ssim(gray_image1, gray_image2, data_range=gray_image2.max() - gray_image2.min())
+
+    print("Structural Similarity Index (SSI):", ssi_index)
+    return ssi_index
+
+def squared_error(source,image99):
+    # Convert images to grayscale
+    gray_image1 = cv.cvtColor(source, cv.COLOR_BGR2GRAY)
+    gray_image2 = cv.cvtColor(image99, cv.COLOR_BGR2GRAY)
+    cv.imwrite('Results/partialSource.jpg',gray_image1)
+    cv.imwrite('Results/partialimage.jpg',gray_image2)
+    # Convert images to grayscale
+
+    # Compute Mean Squared Error (MSE)
+    mse = ((gray_image1 - gray_image2) ** 2).mean()
+
+    print("Mean Squared Error (MSE):", mse)
+    return mse
+
+# Read the content of the TXT file
+def read_txt_file(file_path):
+    with open(file_path, 'r') as file:
+        content = file.read()
+    return content
