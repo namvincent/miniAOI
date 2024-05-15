@@ -37,7 +37,7 @@ async def visualInspection():
 
 def main():
     try:
-       app.run( host='0.0.0.0')
+       app.run(debug = True, host='0.0.0.0')
     except KeyboardInterrupt as e:
         print("out")
 

@@ -481,7 +481,7 @@ async def calculate_async(area):
         )
         top_left, bottom_right = roi
         diff_check = shape_check(partial_source_image,partial_area_image)
-        squared_detect = squared_error(partial_source_image,partial_area_image)
+        corlor_diff = corlor_check(partial_source_image,partial_area_image)
         # wrong_color = is_similar(image, source_image)
         # wrong_color, color_mask = check_wrong_color(partial_image, red_color_ranges)
 
@@ -506,11 +506,12 @@ async def calculate_async(area):
         # Resize the image
         resized_source_image = cv.resize(return_source_image, (width, height))
         resized_image = cv.resize(return_image, (width, height))
-    else:
+    elif checking_type == "s":
+        diff_check = shape_check(partial_source_image,partial_area_image)
         squared_detect = squared_error(partial_source_image,partial_area_image)
         # wrong_color = is_similar(image, source_image)
         # wrong_color, color_mask = check_wrong_color(partial_image, red_color_ranges)
-        squared_detect = 1
+        
         # print(f"Wrong Color: {wrong_color}")
         # if not wrong_color:
         #     result = True
@@ -518,13 +519,30 @@ async def calculate_async(area):
         # else:
         #     result = False
         #     final_color = (0, 0, 255)
-        if squared_detect > 0:
+        if squared_detect > 0 or diff_check == 1:
             result = True
             final_color = (0, 255, 0)
         else:
             result = False
-            final_color = (0, 0, 255) 
-        # checking_content = pytesseract.image_to_string(Image.fromarray(partial_area_image), lang="eng", timeout=10)
+            final_color = (0, 0, 255)        
+        final_result.append(result)
+        cv.rectangle(return_image, top_left, bottom_right, final_color, 3)
+        cv.rectangle(final_result_image, top_left, bottom_right, final_color, 3)
+        cv.rectangle(return_source_image, top_left, bottom_right, final_color, 3)
+        resized_source_image = cv.resize(return_source_image, (width, height))
+        resized_image = cv.resize(return_image, (width, height))
+      
+        final_result_image = await add_unicode_text_to_image(
+            final_result_image,
+            str(checking_content),
+            position=bottom_right,
+            font_path="Fonts/TitilliumWeb-Italic.ttf",
+            font_size=10,
+            text_color=(0, 0, 255),
+        )
+    elif checking_type == "o":
+        result = True
+        final_color = (0, 255, 0)
         checking_content =  read_text_from_image(partial_area_image,angle,threshold)
         if checking_content.strip(' \n\x0c') is None or checking_content.strip(' \n\x0c')  =='':
             checking_content = pytesseract.image_to_string(Image.fromarray(partial_area_image), lang="eng", timeout=10)            
@@ -547,6 +565,8 @@ async def calculate_async(area):
             font_size=10,
             text_color=(0, 0, 255),
         )
+    elif checking_type == "sc":
+        pass
     _, encoded_image = cv.imencode(".jpg", resized_image)
     _, sample_encoded_image = cv.imencode(".jpg", resized_source_image)
     image_bytes = encoded_image.tobytes()
@@ -1103,6 +1123,25 @@ def squared_error(source,image99):
     # mse = ((gray_image1 - gray_image2) ** 2).mean()
 
     # print("Mean Squared Error (MSE):", mse)
+    return result
+
+def corlor_check(source_image,curr_image):
+    # # Load the two images
+    # image1 = cv.imread('image1.jpg')
+    # image2 = cv.imread('image2.jpg')
+    result = 0
+    # Convert the images to the same color space (e.g., RGB)
+    source_rgb = cv.cvtColor(source_image, cv.COLOR_BGR2RGB)
+    curr_rgb = cv.cvtColor(curr_image, cv.COLOR_BGR2RGB)
+
+    # Compute the absolute difference between the images
+    diff = cv.absdiff(source_rgb, curr_rgb)
+
+    # Threshold the difference image to highlight significant differences
+    threshold = 30
+    _,diff_thresholded = cv.threshold(diff, threshold, 255, cv.THRESH_BINARY)
+    cv.imwrite('Results/threshold_color.jpg',diff_thresholded)
+    result = np.count_nonzero(diff_thresholded)
     return result
 
 # Read the content of the TXT file
