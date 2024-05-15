@@ -24,9 +24,10 @@ async def read_out_locations_need_to_be_checked(coordinate_file_path):
             bottom_right_x: int = int(line.strip().split(",")[3])
             bottom_right_y: int = int(line.strip().split(",")[4])
             angle: int = int(line.strip().split(",")[5])
+            threshold: int=int(line.strip().split(",")[6])
             top_left = (top_left_x, top_left_y)
             bottom_right = (bottom_right_x, bottom_right_y)
-            areas.append((check_type, [top_left, bottom_right],angle))
+            areas.append((check_type, [top_left, bottom_right],angle,threshold))
     return areas
 
 
@@ -67,7 +68,7 @@ async def tranform_image(image_path, image=None, alpha=1.5, beta=-50.0, rotate=0
     adjusted = cv.convertScaleAbs(sharpened, alpha=3, beta=100)
 
     # adjusted = gray_image
-    _, thresh = cv.threshold(adjusted, 150, 255, cv.THRESH_BINARY)
+    _, thresh = cv.threshold(adjusted, 150, 255, cv.THRESH_BINARY_INV)
 
     if thresh.shape[0] > thresh.shape[1] and thresh.shape[1] < 300:
         zoom = (300 / thresh.shape[1]) + 1
@@ -360,7 +361,7 @@ async def calculate_average_color(image):
     return np.mean(image, axis=(0, 1))
 
 
-async def compare_color_and_save_mask(image, source, roi, threshold=90):
+async def compare_color_and_save_mask(image, source, roi, threshold=60):
     if roi is None:
         roi = ((0, 0), (image.shape[1], image.shape[0]))
     else:
@@ -418,14 +419,16 @@ async def compare_color_and_save_mask(image, source, roi, threshold=90):
     return color_difference > threshold, roi
 
 
-async def calculate_async(area):
+async def calculate_async(area):    
     global image, source_image
     global final_result_image
     final_result_image = final_result_image
     final_result = []
     return_image = image.copy()
     return_source_image = source_image.copy()
-    checking_type, item,angle = area
+    checking_type, item,angle,threshold = area 
+    from datetime import datetime  
+    print(str(item) + str(datetime.now()))
     result = False
     checking_content = ""
     top_left, bottom_right = item
@@ -477,7 +480,7 @@ async def calculate_async(area):
             image, partial_source_image, item, 70
         )
         top_left, bottom_right = roi
-        scikit_detect = scikit_image(partial_source_image,partial_area_image)
+        diff_check = shape_check(partial_source_image,partial_area_image)
         squared_detect = squared_error(partial_source_image,partial_area_image)
         # wrong_color = is_similar(image, source_image)
         # wrong_color, color_mask = check_wrong_color(partial_image, red_color_ranges)
@@ -489,7 +492,7 @@ async def calculate_async(area):
         # else:
         #     result = False
         #     final_color = (0, 0, 255)
-        if squared_detect < 85:
+        if  diff_check == 1:
             result = True
             final_color = (0, 255, 0)
         else:
@@ -504,18 +507,25 @@ async def calculate_async(area):
         resized_source_image = cv.resize(return_source_image, (width, height))
         resized_image = cv.resize(return_image, (width, height))
     else:
-        # wrong_position = await check_not_in_position(
-        #     partial_area_image, partial_source_image, item, image
-        # )
-        wrong_position = False
-        if not wrong_position:
+        squared_detect = squared_error(partial_source_image,partial_area_image)
+        # wrong_color = is_similar(image, source_image)
+        # wrong_color, color_mask = check_wrong_color(partial_image, red_color_ranges)
+        squared_detect = 1
+        # print(f"Wrong Color: {wrong_color}")
+        # if not wrong_color:
+        #     result = True
+        #     final_color = (0, 255, 0)
+        # else:
+        #     result = False
+        #     final_color = (0, 0, 255)
+        if squared_detect > 0:
             result = True
             final_color = (0, 255, 0)
         else:
             result = False
-            final_color = (0, 0, 255)
+            final_color = (0, 0, 255) 
         # checking_content = pytesseract.image_to_string(Image.fromarray(partial_area_image), lang="eng", timeout=10)
-        checking_content =  read_text_from_image(partial_area_image,angle)
+        checking_content =  read_text_from_image(partial_area_image,angle,threshold)
         if checking_content.strip(' \n\x0c') is None or checking_content.strip(' \n\x0c')  =='':
             checking_content = pytesseract.image_to_string(Image.fromarray(partial_area_image), lang="eng", timeout=10)            
         if checking_content.strip(' \n\x0c') is None or checking_content.strip(' \n\x0c')  =='':
@@ -878,11 +888,10 @@ async def process_visual():
     #             File.write(str(item) + "\n")
     return finish
 
-# asyncio.run(process_visual())
+
 # cv.imwrite("Results/result.jpg", final_result_image)
 
 async def async_checking():
-    
     global image,source_image
     global final_result_image
     await delete_files_in_directory("Results")
@@ -934,7 +943,7 @@ async def delete_files_in_directory(directory):
                 # Print an error message if deletion fails
                 print(f"Error deleting directory: {dir_path}, {e}")
 
-def read_text_from_image(image99 , angle):
+def read_text_from_image(image99 , angle,threshold):
     # Load the image
     # image99 = cv.imread(path)
     text = ''
@@ -942,8 +951,6 @@ def read_text_from_image(image99 , angle):
     # Convert to grayscale
     gray = cv.cvtColor(image99, cv.COLOR_BGR2GRAY)
     cv.imwrite('Results/grayScale.jpg',gray)
-    # Perform OCR on the thresholded image with character whitelisting
-    custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist= .+-*/0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
     dictionary_text = read_txt_file(DICTIONARY_FILE)
     # Split the dictionary text into words
     dictionary_words = dictionary_text.split()
@@ -963,13 +970,12 @@ def read_text_from_image(image99 , angle):
 
     img_rotate = cv.imread(f"Rotate/rotated_image_{angle}.jpg")
     gray = cv.cvtColor(img_rotate, cv.COLOR_BGR2GRAY)
-    # Apply adaptive thresholding
-    _, thresh = cv.threshold(gray, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+    ret, thresholded = cv.threshold(gray, threshold, 255, cv.THRESH_BINARY_INV)
+    cv.imwrite('Results/threshold_inv.jpg',thresholded)
     # Perform OCR on the thresholded image
-    temp_text = pytesseract.image_to_string(Image.fromarray(gray), lang="eng", timeout=10) 
+    temp_text = pytesseract.image_to_string(thresholded,timeout=15) 
 
-    # if len(temp_text) > len(text):
-    #     text = temp_text.strip(' \n\x0c')
+    
 
     print(f'{temp_text}')
         # Split the long string into words
@@ -985,46 +991,125 @@ def read_text_from_image(image99 , angle):
     # blur = cv.GaussianBlur(gray, (5, 5), 0)
     # thresh = cv.adaptiveThreshold(blur, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 4)
 
-   
+    
 
     # Join the matched parts to form a string
-    text = ' '.join(matched_parts)
+    # text = ' '.join(matched_parts)
+    if text is None:
+        if len(temp_text) > len(text):
+            text = temp_text.strip(' \n\x0c')
     
     print(f'Final: {text}')
     return text.strip(' \n\x0c')
 
-def scikit_image(source,image99):
-    # Convert images to grayscale
-    gray_image1 = cv.cvtColor(source, cv.COLOR_BGR2GRAY)
-    gray_image2 = cv.cvtColor(image99, cv.COLOR_BGR2GRAY)
-    cv.imwrite('Results/partialSource.jpg',gray_image1)
-    cv.imwrite('Results/partialimage.jpg',gray_image2)
+def shape_check(source,image99):
+    result = 0
+    diff_count = 0
+    image_point = 0
+    source_point = 0
+    # Initialize a difference image
+    diff_image = np.zeros_like(source, dtype=np.uint8)
 
-    # # Compute Structural Similarity Index (SSI)
-    ssi_index, _ = ssim(gray_image1, gray_image2, full=True)
-
-    # Compute Structural Similarity Index (SSI) with emphasis on luminance
-    # ssi_index = ssim(gray_image1, gray_image2, data_range=gray_image2.max() - gray_image2.min())
-
-    print("Structural Similarity Index (SSI):", ssi_index)
-    return ssi_index
+    # Find differences between the two images
+    diff_points = cv.absdiff(source, image99)
+    diff_points_gray = cv.cvtColor(image99, cv.COLOR_BGR2GRAY)
+    source_gray = cv.cvtColor(source, cv.COLOR_BGR2GRAY)
+    cv.imwrite('Results/Diff_point.jpg',diff_points_gray)
+    # Threshold the difference image to highlight the differing points
+    _, thresholded_diff = cv.threshold(diff_points_gray, 80, 255, cv.THRESH_BINARY_INV)
+    _, thresholded_source = cv.threshold(source_gray, 80, 255, cv.THRESH_BINARY_INV)
+    cv.imwrite('Results/threshold_diff_point.jpg',thresholded_diff)
+    cv.imwrite('Results/threshold_source_point.jpg',thresholded_source)
+    # Find contours to identify differing regions
+    contours, _ = cv.findContours(thresholded_diff, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+    contours_source, _ = cv.findContours(thresholded_source, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+    image_point = len(contours)    
+    source_point = len(contours_source)
+    diff_count = source_point - image_point
+    if source_point == 0:
+        source_point = 1
+    if diff_count < 0 : 
+        diff_count = (diff_count * -1)
+    if (diff_count / source_point)*100 <35:
+        result += 1
+    print(f"Diff Count: {diff_count} / {source_point}")
+    return result
 
 def squared_error(source,image99):
-    # Convert images to grayscale
+    result = 0
+    # Convert images to grayscale    
     gray_image1 = cv.cvtColor(source, cv.COLOR_BGR2GRAY)
     gray_image2 = cv.cvtColor(image99, cv.COLOR_BGR2GRAY)
+    # gray_image1 = 255-source
+    # gray_image2 = 255-image99
     cv.imwrite('Results/partialSource.jpg',gray_image1)
-    cv.imwrite('Results/partialimage.jpg',gray_image2)
-    # Convert images to grayscale
+    cv.imwrite('Results/partialimage.jpg',gray_image2)    
+    cv.imwrite('Results/partialSourceOrigin.jpg',source)
+    cv.imwrite('Results/partialimageOrigin.jpg',image99)
+   
+    # Apply thresholding to the edge difference image
+    threshold_value = 80  # Adjust this value as needed
+    ret, thresholded_diff_source = cv.threshold(gray_image1, threshold_value, 255, cv.THRESH_BINARY)
+    ret, thresholded_diff_image = cv.threshold(gray_image2, threshold_value, 255, cv.THRESH_BINARY)
+    cv.imwrite('Results/threshold_diff_source.jpg',thresholded_diff_source)
+    cv.imwrite('Results/threshold_diff_image.jpg',thresholded_diff_image)
+    # Find contours in both images
+    contours1, _ = cv.findContours(thresholded_diff_source, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+    contours2, _ = cv.findContours(thresholded_diff_image, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
 
+    # drawed_image = gray_image1.copy()
+    # print(contours1)
+    # for points in contours1:
+    #     for point in points:
+    #         print(point[0][0])
+    #         cv.circle(drawed_image, (point[0][0],point[0][1]) , radius=0, color=(0, 0, 255), thickness=-1)
+    #         cv.imwrite('Results/draw_image.jpg',drawed_image)
+   
+    # Create a blank image to draw contours on
+    contour_image = np.zeros_like(source)
+
+    # Draw contours on the blank image
+    cv.drawContours(contour_image, contours1, -1, (255, 255, 255), 1)
+    # Save the contour image
+    cv.imwrite('Results/contours_image1.jpg', contour_image)
+
+    # Create a blank image to draw contours on
+    contour_image = np.zeros_like(image99)
+
+    # Draw contours on the blank image
+    cv.drawContours(contour_image, contours2, -1, (255, 255, 255), 1)
+    # Save the contour image
+    cv.imwrite('Results/contours_image2.jpg', contour_image)
+
+    # Initialize a counter for shape differences
+    shape_diff_count = 0
+    total_count = 0
+    # Compare contours between the two images
+    for contour1 in contours1:
+        match_found = False
+        for contour2 in contours2:
+            # Compare contours using contour area or any other metric
+            if cv.matchShapes(contour1, contour2, cv.CONTOURS_MATCH_I1, 0.0) < 0.1:
+                match_found = True
+                break
+        if not match_found:
+            shape_diff_count += 1
+        total_count +=1
+    print(f"Contour diff: {shape_diff_count}")
+    print(f"Contour total: {total_count}")
+    if ((shape_diff_count / total_count)*100)<35:
+        result = 1
     # Compute Mean Squared Error (MSE)
-    mse = ((gray_image1 - gray_image2) ** 2).mean()
+    # mse = ((gray_image1 - gray_image2) ** 2).mean()
 
-    print("Mean Squared Error (MSE):", mse)
-    return mse
+    # print("Mean Squared Error (MSE):", mse)
+    return result
 
 # Read the content of the TXT file
 def read_txt_file(file_path):
     with open(file_path, 'r') as file:
         content = file.read()
     return content
+
+if __name__ == '__main__':
+    asyncio.run(async_checking())
