@@ -12,6 +12,7 @@ from capture_image import capture_frame, take_picture
 from Object.VisualResult import serialize_visual_data
 import os
 from skimage.metrics import structural_similarity as ssim
+from Scan_Barcode import detectBarcode
 
 
 async def read_out_locations_need_to_be_checked(coordinate_file_path):
@@ -507,8 +508,8 @@ async def calculate_async(area):
         resized_source_image = cv.resize(return_source_image, (width, height))
         resized_image = cv.resize(return_image, (width, height))
     elif checking_type == "s":
-        diff_check = shape_check(partial_source_image,partial_area_image)
-        squared_detect = squared_error(partial_source_image,partial_area_image)
+        diff_check = shape_check(partial_source_image,partial_area_image,threshold)
+        squared_detect = squared_error(partial_source_image,partial_area_image,threshold)
         # wrong_color = is_similar(image, source_image)
         # wrong_color, color_mask = check_wrong_color(partial_image, red_color_ranges)
         
@@ -566,7 +567,28 @@ async def calculate_async(area):
             text_color=(0, 0, 255),
         )
     elif checking_type == "sc":
-        pass
+        result = True
+        final_color = (0, 255, 0)        
+        gray = cv.cvtColor(partial_image, cv.COLOR_BGR2GRAY)
+        inv_gray = cv.bitwise_not(gray)
+        equalize_image = cv.equalizeHist(inv_gray)
+        _, encoded_partial_image = cv.imencode(".jpg", inv_gray)
+        _, source_encoded_image = cv.imencode(".jpg", partial_source_image)
+        image_partial_bytes = encoded_partial_image.tobytes()
+        source_image_bytes = source_encoded_image.tobytes()
+        image_base64 = base64.b64encode(image_partial_bytes).decode()
+        result_barcode = await detectBarcode(image_base64)
+        for item_barcodes in result_barcode:
+            checking_content = item_barcodes
+        cv.rectangle(return_image, top_left, bottom_right, final_color, 3)
+        cv.rectangle(final_result_image, top_left, bottom_right, final_color, 3)
+        cv.rectangle(return_source_image, top_left, bottom_right, final_color, 3)
+        resized_source_image = cv.resize(return_source_image, (width, height))
+        resized_image = cv.resize(return_image, (width, height))
+        if checking_content.strip(' \n\x0c') is None or checking_content.strip(' \n\x0c')  =='':
+            checking_content = 'Read Code not success'
+            result = False
+            final_color = (0, 0, 255)
     _, encoded_image = cv.imencode(".jpg", resized_image)
     _, sample_encoded_image = cv.imencode(".jpg", resized_source_image)
     image_bytes = encoded_image.tobytes()
@@ -993,7 +1015,7 @@ def read_text_from_image(image99 , angle,threshold):
     ret, thresholded = cv.threshold(gray, threshold, 255, cv.THRESH_BINARY_INV)
     cv.imwrite('Results/threshold_inv.jpg',thresholded)
     # Perform OCR on the thresholded image
-    temp_text = pytesseract.image_to_string(thresholded,timeout=15) 
+    temp_text = pytesseract.image_to_string(thresholded,timeout=5) 
 
     
 
@@ -1022,7 +1044,7 @@ def read_text_from_image(image99 , angle,threshold):
     print(f'Final: {text}')
     return text.strip(' \n\x0c')
 
-def shape_check(source,image99):
+def shape_check(source,image99,threshold):
     result = 0
     diff_count = 0
     image_point = 0
@@ -1036,8 +1058,8 @@ def shape_check(source,image99):
     source_gray = cv.cvtColor(source, cv.COLOR_BGR2GRAY)
     cv.imwrite('Results/Diff_point.jpg',diff_points_gray)
     # Threshold the difference image to highlight the differing points
-    _, thresholded_diff = cv.threshold(diff_points_gray, 80, 255, cv.THRESH_BINARY_INV)
-    _, thresholded_source = cv.threshold(source_gray, 80, 255, cv.THRESH_BINARY_INV)
+    _, thresholded_diff = cv.threshold(diff_points_gray, threshold, 255, cv.THRESH_BINARY_INV)
+    _, thresholded_source = cv.threshold(source_gray, threshold, 255, cv.THRESH_BINARY_INV)
     cv.imwrite('Results/threshold_diff_point.jpg',thresholded_diff)
     cv.imwrite('Results/threshold_source_point.jpg',thresholded_source)
     # Find contours to identify differing regions
@@ -1055,7 +1077,7 @@ def shape_check(source,image99):
     print(f"Diff Count: {diff_count} / {source_point}")
     return result
 
-def squared_error(source,image99):
+def squared_error(source,image99,threshold):
     result = 0
     # Convert images to grayscale    
     gray_image1 = cv.cvtColor(source, cv.COLOR_BGR2GRAY)
@@ -1069,8 +1091,8 @@ def squared_error(source,image99):
    
     # Apply thresholding to the edge difference image
     threshold_value = 80  # Adjust this value as needed
-    ret, thresholded_diff_source = cv.threshold(gray_image1, threshold_value, 255, cv.THRESH_BINARY)
-    ret, thresholded_diff_image = cv.threshold(gray_image2, threshold_value, 255, cv.THRESH_BINARY)
+    ret, thresholded_diff_source = cv.threshold(gray_image1, threshold, 255, cv.THRESH_BINARY)
+    ret, thresholded_diff_image = cv.threshold(gray_image2, threshold, 255, cv.THRESH_BINARY)
     cv.imwrite('Results/threshold_diff_source.jpg',thresholded_diff_source)
     cv.imwrite('Results/threshold_diff_image.jpg',thresholded_diff_image)
     # Find contours in both images
