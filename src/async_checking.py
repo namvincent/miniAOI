@@ -6,6 +6,7 @@ import subprocess
 import cv2 as cv
 import numpy as np
 import pytesseract
+import time
 from PIL import Image, ImageFont, ImageDraw
 from spellchecker import SpellChecker
 from capture_image import capture_frame, take_picture
@@ -13,7 +14,8 @@ from Object.VisualResult import serialize_visual_data
 import os
 from skimage.metrics import structural_similarity as ssim
 from Scan_Barcode import detectBarcode
-
+from Template_Matching import template_check
+import matplotlib.pyplot as plt
 
 async def read_out_locations_need_to_be_checked(coordinate_file_path):
     areas = []
@@ -455,7 +457,9 @@ async def calculate_async(area):
     # hsv_partial_path = 'Sources/hsv_partial_image.jpg'
     # # cv.imshow(hsv_partial_path, hsv_partial_image)
     partial_image = await load_partial_image(image, top_left, bottom_right)
+
     partial_path = "Sources/partial_image.jpg"
+    cv.imwrite(partial_path,partial_image)
     # if partial_image is not None:
     # # cv.imshow(partial_path, partial_image)
     # # cv.imshow(partial_image)
@@ -463,6 +467,7 @@ async def calculate_async(area):
         source_image, top_left, bottom_right
     )
     partial_source_path = "Sources/partial_source_image.jpg"
+    cv.imwrite(partial_source_path,partial_source_image)
     # # cv.imshow(partial_source_path, partial_source_image)
     # # cv.imshow(partial_source_image)
     partial_area_image = await load_partial_image(
@@ -481,8 +486,9 @@ async def calculate_async(area):
             image, partial_source_image, item, 70
         )
         top_left, bottom_right = roi
-        diff_check = shape_check(partial_source_image,partial_area_image)
+        # diff_check = shape_check(partial_source_image,partial_area_image,threshold)
         corlor_diff = corlor_check(partial_source_image,partial_area_image)
+        print(f"Color Diff: {corlor_diff}")
         # wrong_color = is_similar(image, source_image)
         # wrong_color, color_mask = check_wrong_color(partial_image, red_color_ranges)
 
@@ -493,7 +499,7 @@ async def calculate_async(area):
         # else:
         #     result = False
         #     final_color = (0, 0, 255)
-        if  diff_check == 1:
+        if  corlor_diff < 30000:
             result = True
             final_color = (0, 255, 0)
         else:
@@ -508,8 +514,10 @@ async def calculate_async(area):
         resized_source_image = cv.resize(return_source_image, (width, height))
         resized_image = cv.resize(return_image, (width, height))
     elif checking_type == "s":
-        diff_check = shape_check(partial_source_image,partial_area_image,threshold)
-        squared_detect = squared_error(partial_source_image,partial_area_image,threshold)
+        # diff_check = shape_check(partial_source_image,partial_area_image,threshold)
+
+        # squared_detect = squared_error(partial_source_image,partial_area_image,threshold)
+        tmp_check = await template_check(partial_source_image,partial_area_image)
         # wrong_color = is_similar(image, source_image)
         # wrong_color, color_mask = check_wrong_color(partial_image, red_color_ranges)
         
@@ -520,7 +528,8 @@ async def calculate_async(area):
         # else:
         #     result = False
         #     final_color = (0, 0, 255)
-        if squared_detect > 0 or diff_check == 1:
+        # if squared_detect > 0 or diff_check == 1 or tmp_check > 80:
+        if tmp_check > 50:
             result = True
             final_color = (0, 255, 0)
         else:
@@ -533,21 +542,21 @@ async def calculate_async(area):
         resized_source_image = cv.resize(return_source_image, (width, height))
         resized_image = cv.resize(return_image, (width, height))
       
-        final_result_image = await add_unicode_text_to_image(
-            final_result_image,
-            str(checking_content),
-            position=bottom_right,
-            font_path="Fonts/TitilliumWeb-Italic.ttf",
-            font_size=10,
-            text_color=(0, 0, 255),
-        )
+       
     elif checking_type == "o":
-        result = True
-        final_color = (0, 255, 0)
-        checking_content =  read_text_from_image(partial_area_image,angle,threshold)
-        if checking_content.strip(' \n\x0c') is None or checking_content.strip(' \n\x0c')  =='':
-            checking_content = pytesseract.image_to_string(Image.fromarray(partial_area_image), lang="eng", timeout=10)            
-        if checking_content.strip(' \n\x0c') is None or checking_content.strip(' \n\x0c')  =='':
+        diff_check = shape_check(partial_source_image,partial_area_image,threshold)
+        if diff_check == 1:
+            result = True
+            final_color = (0, 255, 0)
+            checking_content =  read_text_from_image(partial_area_image,angle,threshold)
+            if checking_content.strip(' \n\x0c') is None or checking_content.strip(' \n\x0c')  =='':
+                gray = cv.cvtColor(partial_area_image, cv.COLOR_BGR2GRAY)
+                checking_content = pytesseract.image_to_string(Image.fromarray(gray), lang="eng", timeout=10)            
+            if checking_content.strip(' \n\x0c') is None or checking_content.strip(' \n\x0c')  =='':
+                checking_content = 'OCR not success'
+                result = False
+                final_color = (0, 0, 255)
+        else:
             checking_content = 'OCR not success'
             result = False
             final_color = (0, 0, 255)
@@ -563,7 +572,7 @@ async def calculate_async(area):
             str(checking_content),
             position=bottom_right,
             font_path="Fonts/TitilliumWeb-Italic.ttf",
-            font_size=10,
+            font_size=40,
             text_color=(0, 0, 255),
         )
     elif checking_type == "sc":
@@ -572,23 +581,30 @@ async def calculate_async(area):
         gray = cv.cvtColor(partial_image, cv.COLOR_BGR2GRAY)
         inv_gray = cv.bitwise_not(gray)
         equalize_image = cv.equalizeHist(inv_gray)
-        _, encoded_partial_image = cv.imencode(".jpg", inv_gray)
+        _, encoded_partial_image = cv.imencode(".jpg", gray)
         _, source_encoded_image = cv.imencode(".jpg", partial_source_image)
         image_partial_bytes = encoded_partial_image.tobytes()
         source_image_bytes = source_encoded_image.tobytes()
         image_base64 = base64.b64encode(image_partial_bytes).decode()
-        result_barcode = await detectBarcode(image_base64)
-        for item_barcodes in result_barcode:
-            checking_content = item_barcodes
-        cv.rectangle(return_image, top_left, bottom_right, final_color, 3)
-        cv.rectangle(final_result_image, top_left, bottom_right, final_color, 3)
-        cv.rectangle(return_source_image, top_left, bottom_right, final_color, 3)
-        resized_source_image = cv.resize(return_source_image, (width, height))
-        resized_image = cv.resize(return_image, (width, height))
+        result_barcode = await detectBarcode(image_base64)        
+        checking_content = result_barcode
         if checking_content.strip(' \n\x0c') is None or checking_content.strip(' \n\x0c')  =='':
             checking_content = 'Read Code not success'
             result = False
             final_color = (0, 0, 255)
+        cv.rectangle(return_image, top_left, bottom_right, final_color, 3)
+        cv.rectangle(final_result_image, top_left, bottom_right, final_color, 3)
+        cv.rectangle(return_source_image, top_left, bottom_right, final_color, 3)
+        resized_source_image = cv.resize(return_source_image, (width, height))
+        resized_image = cv.resize(return_image, (width, height))        
+        final_result_image = await add_unicode_text_to_image(
+            final_result_image,
+            str(checking_content),
+            position=bottom_right,
+            font_path="Fonts/TitilliumWeb-Italic.ttf",
+            font_size=40,
+            text_color=(0, 0, 255),
+        )
     _, encoded_image = cv.imencode(".jpg", resized_image)
     _, sample_encoded_image = cv.imencode(".jpg", resized_source_image)
     image_bytes = encoded_image.tobytes()
@@ -953,11 +969,8 @@ async def async_checking():
     final_data_list = await process_visual()
     visual_data_json = json.dumps(final_data_list)
     cv.imwrite("Results/result.jpg", final_result_image)
-    image = Image.open('Results/result.jpg')
-
-    # Use Tesseract to do OCR on the image
-    # text = pytesseract.image_to_string(image, lang='eng')
-    # print(text)
+    # display('Results/result.jpg')
+   
     return visual_data_json
 
 async def delete_files_in_directory(directory):
@@ -1003,19 +1016,26 @@ def read_text_from_image(image99 , angle,threshold):
     # for angle in range(0,361,45):
     # Open the image file
     imageR = Image.open('Results/grayScale.jpg')
-
+    # custom_config = r'--oem 1 --psm 6 -l friwo-ocr -c tessedit_char_whitelist= .+-*/0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    custom_config = r'--oem 1 --psm 6 -l eng -c tessedit_char_whitelist= .+-*/0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
     # Rotate the image by 90 degrees counter-clockwise
     rotated_image = imageR.rotate(angle)
+    # Set the path to the Tesseract executable (this is usually not necessary on Linux, but shown here for completeness)
+    # pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
 
+    # Ensure the TESSDATA_PREFIX environment variable is set to the tessdata directory
+    # os.environ['TESSDATA_PREFIX'] = '/usr//tesseract-ocr/4.00/tessdata'
     # Save the rotated image
     rotated_image.save(f"Rotate/rotated_image_{angle}.jpg")
 
-    img_rotate = cv.imread(f"Rotate/rotated_image_{angle}.jpg")
-    gray = cv.cvtColor(img_rotate, cv.COLOR_BGR2GRAY)
-    ret, thresholded = cv.threshold(gray, threshold, 255, cv.THRESH_BINARY_INV)
+    img_rotate = cv.imread(f'Rotate/rotated_image_{angle}.jpg')    
+    dst = cv.GaussianBlur(img_rotate, (15, 15), 0)
+    gray = cv.cvtColor(dst, cv.COLOR_BGR2GRAY)
+    inv_gray = cv.bitwise_not(gray)    
+    ret, thresholded = cv.threshold(dst, threshold, 255, cv.THRESH_BINARY)
     cv.imwrite('Results/threshold_inv.jpg',thresholded)
     # Perform OCR on the thresholded image
-    temp_text = pytesseract.image_to_string(thresholded,timeout=5) 
+    temp_text = pytesseract.image_to_string(dst, config= custom_config) 
 
     
 
@@ -1037,7 +1057,7 @@ def read_text_from_image(image99 , angle,threshold):
 
     # Join the matched parts to form a string
     # text = ' '.join(matched_parts)
-    if text is None:
+    if text == '':
         if len(temp_text) > len(text):
             text = temp_text.strip(' \n\x0c')
     
@@ -1171,6 +1191,28 @@ def read_txt_file(file_path):
     with open(file_path, 'r') as file:
         content = file.read()
     return content
+
+def display(im_path):
+    dpi = 80
+    im_data = plt.imread(im_path)
+
+    height, width  = im_data.shape[:2]
+
+    # What size does the figure need to be in inches to fit the image?
+    figsize = width / float(dpi), height / float(dpi)
+
+    # Create a figure of the right size with one axes that takes up the full figure
+    fig = plt.figure(figsize=figsize)
+    ax = fig.add_axes([0, 0, 1, 1])
+
+    # Hide spines, ticks, etc.
+    ax.axis('off')
+
+    # Display the image.
+    ax.imshow(im_data, cmap='gray')
+
+    plt.savefig()
+ 
 
 if __name__ == '__main__':
     asyncio.run(async_checking())

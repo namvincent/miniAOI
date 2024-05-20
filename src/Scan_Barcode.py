@@ -3,10 +3,11 @@ import glob
 from dbr import *
 import requests
 import base64
-
+import re
 
 async def detectBarcode(path):
-
+    substring_to_remove  = r"{GS}"
+    new_string =""
     try:
         api_url = 'http://10.100.27.165:5000/api/detectbarcode'
         params = {'image':f'{path}'}
@@ -15,10 +16,12 @@ async def detectBarcode(path):
         if response is not None:
             if response.status_code == 200:
                 gets = response.json()
-                # if gets:
-                #     print(gets)
-                # else:
-                #     print("None 1" + gets)
+                for item in gets:
+                    if substring_to_remove in  item:
+                        # Remove the substring using regex
+                        new_string = item.replace(substring_to_remove, "")
+                    else:
+                        new_string = item
             else:
                 print(f"{response.status_code}")
                 print(f"{response.reason}")
@@ -83,4 +86,4 @@ async def detectBarcode(path):
     # except BarcodeReaderError as bre:
     #     print(bre)
     
-    return gets
+    return new_string
